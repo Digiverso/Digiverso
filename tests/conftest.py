@@ -15,23 +15,27 @@ from app.api.dependencies import get_auth_service
 from app.cache.category_tree import InMemoryCategoryTreeCache
 from app.core.config import Settings, load_settings
 from app.core.rate_limit import RateLimiter
-from app.core.security import VerificationTokenManager
+from app.core.security import SessionTokenManager, VerificationTokenManager
 from app.main import create_app
 from app.repository.audit import SQLiteAuditRepository
 from app.repository.auth_repository import auth_repository
 from app.repository.categories import SQLiteCategoryRepository
 from app.repository.database import Database
 from app.repository.email_repository import EmailDelivery
+from app.repository.products import SQLiteProductRepository
 from app.services.auth_service import AuthService
 from app.services.categories import CategoryService
+from app.services.products import ProductService
 
 CATEGORIES_URL = "/api/v1/catalog/categories"
+PRODUCTS_URL = "/api/v1/catalog/products"
 PASSWORD = "Abcdef1!"
 
 
 class FakeEmailGateway:
     def __init__(self) -> None:
         self.sent: list[dict[str, object]] = []
+        self.password_resets: list[dict[str, object]] = []
 
     def send_verification(
         self,
@@ -46,6 +50,30 @@ class FakeEmailGateway:
                 "correo": correo,
                 "nombre": nombre,
                 "url": verification_url,
+                "expires_at": expires_at,
+                "message_id": message_id,
+            }
+        )
+        return EmailDelivery(
+            provider="fake",
+            message_id=message_id,
+            estado="enviado",
+            intento_en=datetime.now(timezone.utc),
+        )
+
+    def send_password_reset(
+        self,
+        correo: str,
+        nombre: str,
+        reset_url: str,
+        expires_at: datetime,
+    ) -> EmailDelivery:
+        message_id = f"fake_reset_{uuid.uuid4().hex[:12]}"
+        self.password_resets.append(
+            {
+                "correo": correo,
+                "nombre": nombre,
+                "url": reset_url,
                 "expires_at": expires_at,
                 "message_id": message_id,
             }
@@ -74,6 +102,11 @@ def extraer_token(gateway: FakeEmailGateway) -> str:
     return parse_qs(urlsplit(url).query)["token"][0]
 
 
+def extraer_token_recuperacion(gateway: FakeEmailGateway) -> str:
+    url = str(gateway.password_resets[-1]["url"])
+    return parse_qs(urlsplit(url).query)["token"][0]
+
+
 # ---------------------------------------------------------------- HU-01
 @pytest.fixture
 def clock() -> dict[str, datetime]:
@@ -93,7 +126,16 @@ def service(clock: dict[str, datetime], email_gateway: FakeEmailGateway) -> Auth
         settings=settings,
         email_gateway=email_gateway,
         rate_limiter=RateLimiter(limit=10, window_seconds=600),
+        login_rate_limiter=RateLimiter(
+            limit=settings.login_rate_limit,
+            window_seconds=settings.rate_limit_window_seconds,
+        ),
+        password_rate_limiter=RateLimiter(
+            limit=settings.password_recovery_rate_limit,
+            window_seconds=settings.rate_limit_window_seconds,
+        ),
         token_manager=VerificationTokenManager(settings.secret_key),
+        session_token_manager=SessionTokenManager(settings),
         clock=lambda: clock["now"],
     )
 
@@ -145,11 +187,55 @@ def create_category(client: TestClient) -> Callable[..., Any]:
     return _create
 
 
+# ---------------------------------------------------------------- HU-08
+@pytest.fixture()
+def product_service(category_settings: Settings) -> ProductService:
+    database = Database(category_settings.database_path)
+    return ProductService(
+        repository=SQLiteProductRepository(database),
+        category_repository=SQLiteCategoryRepository(database),
+        audit_repository=SQLiteAuditRepository(database),
+        settings=category_settings,
+    )
+
+
+@pytest.fixture()
+def create_product(client: TestClient) -> Callable[..., Any]:
+    """Crea un producto válido; genera una categoría si no se indica una."""
+
+    def _create(
+        *,
+        headers: dict[str, str] | None = None,
+        categoria_id: str | None = None,
+        **cambios: object,
+    ):
+        if categoria_id is None:
+            # La creación de categorías (HU-07) requiere rol administrador;
+            # el producto se crea después con el actor productor.
+            response = client.post(
+                CATEGORIES_URL,
+                json={"nombre": f"Cat {uuid.uuid4().hex[:8]}"},
+            )
+            categoria_id = response.json()["data"]["id"]
+        payload: dict[str, Any] = {
+            "nombre": "Pack de ilustraciones",
+            "descripcion": "Pack de ilustraciones digitales en alta resolución.",
+            "precio": 45000,
+            "categorias": [categoria_id],
+            "medios": [{"tipo": "imagen", "url": "https://cdn.test/uno.webp"}],
+        }
+        payload.update(cambios)
+        return client.post(PRODUCTS_URL, json=payload, headers=headers or {})
+
+    return _create
+
+
 # ------------------------------------------------------------- compartido
 @pytest.fixture()
 def client(
     service: AuthService,
     category_service: CategoryService,
+    product_service: ProductService,
     category_settings: Settings,
 ) -> TestClient:
     auth_repository.reset()
@@ -159,5 +245,6 @@ def client(
         # El factory crea su propio servicio; usamos el de la fixture para
         # poder inspeccionar repositorio, caché y auditoría desde las pruebas.
         test_client.app.state.category_service = category_service
+        test_client.app.state.product_service = product_service
         yield test_client
     test_app.dependency_overrides.clear()

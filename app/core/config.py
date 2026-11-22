@@ -76,6 +76,20 @@ class Settings:
     smtp_password: str = ""
     smtp_use_tls: bool = True
 
+    # Sesión y recuperación (HU-02)
+    jwt_private_key: str = ""
+    jwt_public_key: str = ""
+    jwt_issuer: str = "digiverso"
+    jwt_audience: str = "digiverso-api"
+    access_token_ttl_minutes: int = 15
+    refresh_token_ttl_days: int = 7
+    password_reset_ttl_minutes: int = 30
+    password_reset_url_base: str = "http://127.0.0.1:8000/restablecer-contrasena"
+    max_failed_login_attempts: int = 5
+    account_lock_minutes: int = 15
+    login_rate_limit: int = 10
+    password_recovery_rate_limit: int = 5
+
     # Catálogo (HU-07)
     database_path: Path = field(
         default_factory=lambda: sqlite_path(
@@ -87,6 +101,19 @@ class Settings:
     category_description_max_length: int = 500
     require_explicit_actor: bool = False
     default_actor_id: str = "usr_admin"
+
+    # Catálogo (HU-08). Los valores numéricos de CAT-03/09/11/12/13 no estaban
+    # definidos en el repositorio; se fijan aquí y son sobreescribibles por .env.
+    product_min_price: int = 3500  # CAT-01
+    product_currency: str = "COP"
+    product_max_age: int = 99  # CAT-03
+    product_min_images: int = 1  # CAT-09
+    product_name_min_length: int = 2  # CAT-11
+    product_name_max_length: int = 120  # CAT-11
+    product_description_min_length: int = 1  # CAT-12
+    product_description_max_length: int = 2000  # CAT-12
+    product_max_categories: int = 5  # CAT-13
+    actor_token_ttl_seconds: int = 3600
 
     @property
     def debug(self) -> bool:
@@ -136,12 +163,37 @@ def load_settings() -> Settings:
         smtp_username=value("SMTP_USERNAME", ""),
         smtp_password=value("SMTP_PASSWORD", ""),
         smtp_use_tls=_as_bool(value("SMTP_USE_TLS", "true")),
+        jwt_private_key=value("AUTH_JWT_PRIVATE_KEY", ""),
+        jwt_public_key=value("AUTH_JWT_PUBLIC_KEY", ""),
+        jwt_issuer=value("AUTH_JWT_ISSUER", "digiverso"),
+        jwt_audience=value("AUTH_JWT_AUDIENCE", "digiverso-api"),
+        access_token_ttl_minutes=int(value("AUTH_ACCESS_TOKEN_TTL_MINUTES", "15")),
+        refresh_token_ttl_days=int(value("AUTH_REFRESH_TOKEN_TTL_DAYS", "7")),
+        password_reset_ttl_minutes=int(value("AUTH_PASSWORD_RESET_TTL_MINUTES", "30")),
+        password_reset_url_base=value(
+            "AUTH_PASSWORD_RESET_URL_BASE",
+            "http://127.0.0.1:8000/restablecer-contrasena",
+        ),
+        max_failed_login_attempts=int(value("AUTH_MAX_FAILED_LOGIN_ATTEMPTS", "5")),
+        account_lock_minutes=int(value("AUTH_ACCOUNT_LOCK_MINUTES", "15")),
+        login_rate_limit=int(value("AUTH_LOGIN_RATE_LIMIT", "10")),
+        password_recovery_rate_limit=int(value("AUTH_PASSWORD_RECOVERY_RATE_LIMIT", "5")),
         database_path=sqlite_path(value("DATABASE_URL", "sqlite:///./dev.db")),
         category_name_min_length=int(value("CAT_17_MIN_LENGTH", "2")),
         category_name_max_length=int(value("CAT_17_MAX_LENGTH", "80")),
         category_description_max_length=int(value("CAT_17_DESCRIPTION_MAX", "500")),
         require_explicit_actor=_as_bool(value("REQUIRE_EXPLICIT_ACTOR", "false")),
         default_actor_id=value("DEFAULT_ADMIN_ACTOR_ID", "usr_admin"),
+        product_min_price=int(value("CAT_01_MIN_PRICE", "3500")),
+        product_currency=value("CAT_01_CURRENCY", "COP").strip().upper(),
+        product_max_age=int(value("CAT_03_MAX_AGE", "99")),
+        product_min_images=int(value("CAT_09_MIN_IMAGES", "1")),
+        product_name_min_length=int(value("CAT_11_MIN_LENGTH", "2")),
+        product_name_max_length=int(value("CAT_11_MAX_LENGTH", "120")),
+        product_description_min_length=int(value("CAT_12_MIN_LENGTH", "1")),
+        product_description_max_length=int(value("CAT_12_MAX_LENGTH", "2000")),
+        product_max_categories=int(value("CAT_13_MAX_CATEGORIES", "5")),
+        actor_token_ttl_seconds=int(value("ACTOR_TOKEN_TTL_SECONDS", "3600")),
     )
 
 

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 from typing import Any, Generic, TypeVar
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 T = TypeVar("T")
 
@@ -88,11 +88,71 @@ class LoginRequest(BaseModel):
     password: str
 
 
-class LoginResponseData(BaseModel):
-    userId: str
-    correo: str
-    estado: AccountStatus
+class SessionUser(BaseModel):
+    id: str
     rol: Role
+
+
+class LoginResponseData(BaseModel):
+    accessToken: str
+    refreshToken: str
+    expiraEn: int
+    usuario: SessionUser
+
+
+class LogoutRequest(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "refreshToken": "rt_token_obtenido_en_el_login"
+            }
+        }
+    )
+
+    refreshToken: str = Field(..., min_length=10, description="Refresh token a revocar")
+
+
+class RefreshRequest(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "refreshToken": "rt_token_obtenido_en_el_login"
+            }
+        }
+    )
+
+    refreshToken: str = Field(..., min_length=10, description="Refresh token a rotar")
+
+
+class PasswordForgotRequest(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "correo": "ana@example.com"
+            }
+        }
+    )
+
+    correo: EmailStr = Field(..., description="Correo de la cuenta a recuperar")
+
+
+class PasswordResetRequest(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "token": "token_temporal_recibido_por_correo",
+                "nuevaPassword": "NuevaClave1!",
+            }
+        }
+    )
+
+    token: str = Field(..., min_length=10, description="Token de recuperación recibido por correo")
+    nuevaPassword: str = Field(
+        ...,
+        min_length=1,
+        validation_alias=AliasChoices("nuevaPassword", "password"),
+        description="Nueva contraseña de la cuenta",
+    )
 
 
 class ApiResponse(BaseModel, Generic[T]):
@@ -117,6 +177,8 @@ class Account:
     rol: Role = Role.CONSUMIDOR
     creado_en: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     verificado_en: datetime | None = None
+    intentos_fallidos: int = 0
+    bloqueado_hasta: datetime | None = None
 
     def esta_pendiente(self) -> bool:
         return self.estado is AccountStatus.PENDIENTE
@@ -125,16 +187,34 @@ class Account:
         self.estado = AccountStatus.ACTIVA
         self.verificado_en = ahora
 
+    def esta_bloqueada(self, ahora: datetime) -> bool:
+        if self.bloqueado_hasta is not None and self.bloqueado_hasta <= ahora:
+            self.bloqueado_hasta = None
+            self.intentos_fallidos = 0
+        return self.bloqueado_hasta is not None and self.bloqueado_hasta > ahora
+
+    def registrar_intento_fallido(
+        self,
+        ahora: datetime,
+        max_intentos: int,
+        minutos_bloqueo: int,
+    ) -> bool:
+        self.intentos_fallidos += 1
+        if self.intentos_fallidos >= max_intentos:
+            self.bloqueado_hasta = ahora + timedelta(minutes=minutos_bloqueo)
+            self.intentos_fallidos = 0
+            return True
+        return False
+
+    def reiniciar_intentos(self) -> None:
+        self.intentos_fallidos = 0
+        self.bloqueado_hasta = None
+
+    def actualizar_password(self, password_hash: str) -> None:
+        self.password_hash = password_hash
+
     def to_register_data(self) -> RegisterResponseData:
         return RegisterResponseData(
-            userId=self.id,
-            correo=self.correo,
-            estado=self.estado,
-            rol=self.rol,
-        )
-
-    def to_login_data(self) -> LoginResponseData:
-        return LoginResponseData(
             userId=self.id,
             correo=self.correo,
             estado=self.estado,
@@ -159,6 +239,28 @@ class VerificationToken:
             return False
         self.usado_en = ahora
         return True
+
+
+class PasswordResetToken(VerificationToken):
+    pass
+
+
+@dataclass
+class Session:
+    id: str
+    cuenta_id: str
+    access_token_jti: str
+    refresh_token_hash: str
+    creado_en: datetime
+    expira_en: datetime
+    revocado_en: datetime | None = None
+
+    def esta_activa(self, ahora: datetime) -> bool:
+        return self.revocado_en is None and self.expira_en > ahora
+
+    def revocar(self, ahora: datetime) -> None:
+        if self.revocado_en is None:
+            self.revocado_en = ahora
 
 
 @dataclass(frozen=True)
@@ -204,6 +306,21 @@ class AccountNotVerifiedError(DomainError):
 class InvalidCredentialsError(DomainError):
     status_code = 401
     codigo = "credenciales_invalidas"
+
+
+class AccountLockedError(DomainError):
+    status_code = 423
+    codigo = "cuenta_bloqueada"
+
+
+class InvalidRefreshTokenError(DomainError):
+    status_code = 401
+    codigo = "refresh_token_invalido"
+
+
+class InvalidPasswordResetTokenError(DomainError):
+    status_code = 410
+    codigo = "token_recuperacion_invalido"
 
 
 class RateLimitExceededError(DomainError):
