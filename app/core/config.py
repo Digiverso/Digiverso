@@ -1,8 +1,25 @@
+"""Configuración compartida de la API (autenticación + catálogo)."""
+
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
+
+SQLITE_PREFIX = "sqlite:///"
+
+
+def sqlite_path(database_url: str) -> Path:
+    """Convierte una URL ``sqlite:///ruta`` en una ruta absoluta de sistema."""
+
+    if not database_url.startswith(SQLITE_PREFIX):
+        raise ValueError(
+            "DATABASE_URL no soportada; se espera el formato sqlite:///ruta/al/archivo.db"
+        )
+    raw_path = database_url[len(SQLITE_PREFIX) :]
+    path = Path(raw_path).expanduser()
+    return path if path.is_absolute() else Path.cwd() / path
 
 
 def _read_env_file() -> dict[str, str]:
@@ -28,27 +45,54 @@ def _as_bool(value: str) -> bool:
 
 @dataclass(frozen=True)
 class Settings:
-    app_name: str
-    app_env: str
-    app_debug: bool
-    app_port: int
-    secret_key: str
-    password_min_length: int
-    password_require_uppercase: bool
-    password_require_lowercase: bool
-    password_require_digit: bool
-    password_require_special: bool
-    verification_token_ttl_minutes: int
-    verification_url_base: str
-    register_rate_limit: int
-    rate_limit_window_seconds: int
-    email_provider: str
-    email_from: str
-    smtp_host: str
-    smtp_port: int
-    smtp_username: str
-    smtp_password: str
-    smtp_use_tls: bool
+    """Parámetros de ejecución de todos los módulos implementados.
+
+    Los campos ``category_name_*`` materializan la regla CAT-17, cuyo valor
+    numérico no estaba definido en el repositorio.
+    """
+
+    # Aplicación
+    app_name: str = "Digiverso API"
+    app_env: str = "development"
+    app_debug: bool = True
+    app_port: int = 8000
+
+    # Autenticación (HU-01)
+    secret_key: str = "cambia-este-valor-en-produccion"
+    password_min_length: int = 8
+    password_require_uppercase: bool = True
+    password_require_lowercase: bool = True
+    password_require_digit: bool = True
+    password_require_special: bool = True
+    verification_token_ttl_minutes: int = 15
+    verification_url_base: str = "http://127.0.0.1:8000/verificar-correo"
+    register_rate_limit: int = 10
+    rate_limit_window_seconds: int = 600
+    email_provider: str = "console"
+    email_from: str = "no-responder@digiverso.local"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_use_tls: bool = True
+
+    # Catálogo (HU-07)
+    database_path: Path = field(
+        default_factory=lambda: sqlite_path(
+            os.getenv("DATABASE_URL", "sqlite:///./dev.db")
+        )
+    )
+    category_name_min_length: int = 2
+    category_name_max_length: int = 80
+    category_description_max_length: int = 500
+    require_explicit_actor: bool = False
+    default_actor_id: str = "usr_admin"
+
+    @property
+    def debug(self) -> bool:
+        """Alias de ``app_debug`` usado por el factory de aplicación."""
+
+        return self.app_debug
 
 
 def load_settings() -> Settings:
@@ -64,14 +108,27 @@ def load_settings() -> Settings:
         app_port=int(value("APP_PORT", "8000")),
         secret_key=value("SECRET_KEY", "cambia-este-valor-en-produccion"),
         password_min_length=int(value("AUTH_PASSWORD_MIN_LENGTH", "8")),
-        password_require_uppercase=_as_bool(value("AUTH_PASSWORD_REQUIRE_UPPERCASE", "true")),
-        password_require_lowercase=_as_bool(value("AUTH_PASSWORD_REQUIRE_LOWERCASE", "true")),
+        password_require_uppercase=_as_bool(
+            value("AUTH_PASSWORD_REQUIRE_UPPERCASE", "true")
+        ),
+        password_require_lowercase=_as_bool(
+            value("AUTH_PASSWORD_REQUIRE_LOWERCASE", "true")
+        ),
         password_require_digit=_as_bool(value("AUTH_PASSWORD_REQUIRE_DIGIT", "true")),
-        password_require_special=_as_bool(value("AUTH_PASSWORD_REQUIRE_SPECIAL", "true")),
-        verification_token_ttl_minutes=int(value("AUTH_VERIFICATION_TOKEN_TTL_MINUTES", "15")),
-        verification_url_base=value("AUTH_VERIFICATION_URL_BASE", "http://127.0.0.1:8000/verificar-correo"),
+        password_require_special=_as_bool(
+            value("AUTH_PASSWORD_REQUIRE_SPECIAL", "true")
+        ),
+        verification_token_ttl_minutes=int(
+            value("AUTH_VERIFICATION_TOKEN_TTL_MINUTES", "15")
+        ),
+        verification_url_base=value(
+            "AUTH_VERIFICATION_URL_BASE",
+            "http://127.0.0.1:8000/verificar-correo",
+        ),
         register_rate_limit=int(value("AUTH_REGISTER_RATE_LIMIT", "10")),
-        rate_limit_window_seconds=int(value("AUTH_RATE_LIMIT_WINDOW_SECONDS", "600")),
+        rate_limit_window_seconds=int(
+            value("AUTH_RATE_LIMIT_WINDOW_SECONDS", "600")
+        ),
         email_provider=value("EMAIL_PROVIDER", "console").strip().lower(),
         email_from=value("EMAIL_FROM", "no-responder@digiverso.local"),
         smtp_host=value("SMTP_HOST", ""),
@@ -79,7 +136,20 @@ def load_settings() -> Settings:
         smtp_username=value("SMTP_USERNAME", ""),
         smtp_password=value("SMTP_PASSWORD", ""),
         smtp_use_tls=_as_bool(value("SMTP_USE_TLS", "true")),
+        database_path=sqlite_path(value("DATABASE_URL", "sqlite:///./dev.db")),
+        category_name_min_length=int(value("CAT_17_MIN_LENGTH", "2")),
+        category_name_max_length=int(value("CAT_17_MAX_LENGTH", "80")),
+        category_description_max_length=int(value("CAT_17_DESCRIPTION_MAX", "500")),
+        require_explicit_actor=_as_bool(value("REQUIRE_EXPLICIT_ACTOR", "false")),
+        default_actor_id=value("DEFAULT_ADMIN_ACTOR_ID", "usr_admin"),
     )
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    """Configuración cacheada usada por el factory de aplicación."""
+
+    return load_settings()
 
 
 settings = load_settings()
