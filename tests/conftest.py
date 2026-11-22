@@ -22,10 +22,13 @@ from app.repository.auth_repository import auth_repository
 from app.repository.categories import SQLiteCategoryRepository
 from app.repository.database import Database
 from app.repository.email_repository import EmailDelivery
+from app.repository.products import SQLiteProductRepository
 from app.services.auth_service import AuthService
 from app.services.categories import CategoryService
+from app.services.products import ProductService
 
 CATEGORIES_URL = "/api/v1/catalog/categories"
+PRODUCTS_URL = "/api/v1/catalog/products"
 PASSWORD = "Abcdef1!"
 
 
@@ -184,11 +187,55 @@ def create_category(client: TestClient) -> Callable[..., Any]:
     return _create
 
 
+# ---------------------------------------------------------------- HU-08
+@pytest.fixture()
+def product_service(category_settings: Settings) -> ProductService:
+    database = Database(category_settings.database_path)
+    return ProductService(
+        repository=SQLiteProductRepository(database),
+        category_repository=SQLiteCategoryRepository(database),
+        audit_repository=SQLiteAuditRepository(database),
+        settings=category_settings,
+    )
+
+
+@pytest.fixture()
+def create_product(client: TestClient) -> Callable[..., Any]:
+    """Crea un producto válido; genera una categoría si no se indica una."""
+
+    def _create(
+        *,
+        headers: dict[str, str] | None = None,
+        categoria_id: str | None = None,
+        **cambios: object,
+    ):
+        if categoria_id is None:
+            # La creación de categorías (HU-07) requiere rol administrador;
+            # el producto se crea después con el actor productor.
+            response = client.post(
+                CATEGORIES_URL,
+                json={"nombre": f"Cat {uuid.uuid4().hex[:8]}"},
+            )
+            categoria_id = response.json()["data"]["id"]
+        payload: dict[str, Any] = {
+            "nombre": "Pack de ilustraciones",
+            "descripcion": "Pack de ilustraciones digitales en alta resolución.",
+            "precio": 45000,
+            "categorias": [categoria_id],
+            "medios": [{"tipo": "imagen", "url": "https://cdn.test/uno.webp"}],
+        }
+        payload.update(cambios)
+        return client.post(PRODUCTS_URL, json=payload, headers=headers or {})
+
+    return _create
+
+
 # ------------------------------------------------------------- compartido
 @pytest.fixture()
 def client(
     service: AuthService,
     category_service: CategoryService,
+    product_service: ProductService,
     category_settings: Settings,
 ) -> TestClient:
     auth_repository.reset()
@@ -198,5 +245,6 @@ def client(
         # El factory crea su propio servicio; usamos el de la fixture para
         # poder inspeccionar repositorio, caché y auditoría desde las pruebas.
         test_client.app.state.category_service = category_service
+        test_client.app.state.product_service = product_service
         yield test_client
     test_app.dependency_overrides.clear()

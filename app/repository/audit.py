@@ -37,16 +37,20 @@ class SQLiteAuditRepository:
                 ),
             )
 
-    def list_for_entity(self, entity_id: str) -> list[dict[str, Any]]:
+    def list_for_entity(
+        self, entity_id: str, *, entidad: str = "categoria"
+    ) -> list[dict[str, Any]]:
+        """Eventos de una entidad; por defecto mantiene el contrato HU-07."""
+
         with self.database.connection() as connection:
             rows = connection.execute(
                 """
                 SELECT accion, actor_id, actor_roles, fecha, cambios
                 FROM audit_log
-                WHERE entidad = 'categoria' AND entidad_id = ?
+                WHERE entidad = ? AND entidad_id = ?
                 ORDER BY id
                 """,
-                (entity_id,),
+                (entidad, entity_id),
             ).fetchall()
         return [
             {
