@@ -189,3 +189,13 @@ def test_openapi_documenta_los_endpoints(client: TestClient) -> None:
     assert "/api/v1/auth/register" in esquema["paths"]
     assert "/api/v1/auth/email/verify" in esquema["paths"]
     assert esquema["paths"]["/api/v1/auth/register"]["post"]["responses"]["201"]
+
+
+def test_swagger_ui_y_ejemplos_estan_disponibles(client: TestClient) -> None:
+    docs = client.get("/docs")
+    esquema = client.get("/openapi.json").json()
+
+    assert docs.status_code == 200
+    assert "swagger-ui" in docs.text.lower()
+    assert "example" in esquema["components"]["schemas"]["RegisterRequest"]
+    assert "example" in esquema["components"]["schemas"]["VerifyRequest"]

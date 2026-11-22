@@ -20,6 +20,17 @@ class Role(StrEnum):
 
 
 class RegisterRequest(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "nombre": "Ana Pérez",
+                "correo": "ana@example.com",
+                "password": "Abcdef1!",
+                "aceptar_politicas": True,
+            }
+        }
+    )
+
     nombre: str = Field(..., min_length=2, max_length=100, description="Nombre del visitante")
     correo: EmailStr = Field(..., description="Correo electrónico del visitante")
     password: str = Field(..., min_length=1, description="Contraseña de la cuenta")
@@ -46,6 +57,14 @@ class RegisterResponseData(BaseModel):
 
 
 class VerifyRequest(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "token": "token_temporal_recibido_por_correo"
+            }
+        }
+    )
+
     token: str = Field(..., min_length=10, description="Token de verificación recibido por correo")
 
 
@@ -56,6 +75,15 @@ class VerifyResponseData(BaseModel):
 
 
 class LoginRequest(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "correo": "ana@example.com",
+                "password": "Abcdef1!",
+            }
+        }
+    )
+
     correo: EmailStr
     password: str
 
