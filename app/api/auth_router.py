@@ -7,6 +7,10 @@ from app.domain.auth import (
     ApiResponse,
     LoginRequest,
     LoginResponseData,
+    LogoutRequest,
+    PasswordForgotRequest,
+    PasswordResetRequest,
+    RefreshRequest,
     RegisterRequest,
     RegisterResponseData,
     VerifyRequest,
@@ -61,10 +65,12 @@ def verificar_cuenta(
     response_model=ApiResponse[LoginResponseData],
     status_code=status.HTTP_200_OK,
     summary="Iniciar sesión",
-    description="Valida credenciales y bloquea el acceso mientras la cuenta esté pendiente de verificación.",
+    description="Valida credenciales, estado de la cuenta y emite tokens de acceso y refresco.",
     responses={
         401: {"description": "Credenciales inválidas"},
         403: {"description": "La cuenta aún no está verificada"},
+        423: {"description": "Cuenta bloqueada temporalmente"},
+        429: {"description": "Límite de intentos excedido"},
     },
 )
 def iniciar_sesion(
@@ -73,3 +79,75 @@ def iniciar_sesion(
     ip: str = Depends(get_client_ip),
 ) -> ApiResponse[LoginResponseData]:
     return service.login(datos, ip)
+
+
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Cerrar sesión",
+    description="Revoca el refresh token y la sesión asociada.",
+    responses={
+        401: {"description": "Refresh token inválido o revocado"},
+    },
+)
+def cerrar_sesion(
+    datos: LogoutRequest,
+    service: AuthService = Depends(get_auth_service),
+    ip: str = Depends(get_client_ip),
+) -> None:
+    service.logout(datos, ip)
+
+
+@router.post(
+    "/refresh",
+    response_model=ApiResponse[LoginResponseData],
+    status_code=status.HTTP_200_OK,
+    summary="Rotar refresh token",
+    description="Revoca la sesión actual y emite un nuevo par de tokens.",
+    responses={
+        401: {"description": "Refresh token inválido o ya rotado"},
+    },
+)
+def renovar_sesion(
+    datos: RefreshRequest,
+    service: AuthService = Depends(get_auth_service),
+    ip: str = Depends(get_client_ip),
+) -> ApiResponse[LoginResponseData]:
+    return service.refresh(datos, ip)
+
+
+@router.post(
+    "/password/forgot",
+    response_model=ApiResponse[dict[str, str]],
+    status_code=status.HTTP_200_OK,
+    summary="Solicitar recuperación de contraseña",
+    description="Responde de forma genérica y envía un enlace temporal si el correo existe.",
+    responses={
+        429: {"description": "Límite de solicitudes excedido"},
+    },
+)
+def solicitar_recuperacion(
+    datos: PasswordForgotRequest,
+    service: AuthService = Depends(get_auth_service),
+    ip: str = Depends(get_client_ip),
+) -> ApiResponse[dict[str, str]]:
+    return service.password_forgot(datos, ip)
+
+
+@router.post(
+    "/password/reset",
+    response_model=ApiResponse[dict[str, str]],
+    status_code=status.HTTP_200_OK,
+    summary="Restablecer contraseña",
+    description="Valida el enlace temporal, aplica la política de contraseña y revoca las sesiones activas.",
+    responses={
+        400: {"description": "La contraseña no cumple la política"},
+        410: {"description": "Token expirado, inválido o ya utilizado"},
+    },
+)
+def restablecer_contrasena(
+    datos: PasswordResetRequest,
+    service: AuthService = Depends(get_auth_service),
+    ip: str = Depends(get_client_ip),
+) -> ApiResponse[dict[str, str]]:
+    return service.password_reset(datos, ip)

@@ -109,7 +109,11 @@ def test_verificacion_exitosa_activa_cuenta_y_habilita_login(
         json={"correo": "ana@example.com", "password": PASSWORD},
     )
     assert login.status_code == 200
-    assert login.json()["data"]["estado"] == "activa"
+    assert login.json()["message"] == "Inicio de sesión exitoso."
+    assert login.json()["data"]["accessToken"]
+    assert login.json()["data"]["refreshToken"]
+    assert login.json()["data"]["expiraEn"] == 900
+    assert login.json()["data"]["usuario"] == {"id": "usr_001", "rol": "consumidor"}
 
     desconocido = client.post(
         "/api/v1/auth/login",
