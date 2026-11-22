@@ -1,24 +1,37 @@
-"""Punto de entrada de la API Digiverso."""
+"""Punto de entrada de la API Digiverso (autenticación + catálogo)."""
 
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import JSONResponse
 
+from app.api.auth_router import router as auth_router
+from app.api.errors import register_exception_handlers
 from app.api.v1.categories import router as categories_router
 from app.cache.category_tree import InMemoryCategoryTreeCache
-from app.core.config import Settings, get_settings
+from app.core.config import Settings, get_settings, settings as default_settings
 from app.core.responses import ApiResponse, ok
 from app.domain.exceptions import CatalogError
 from app.repository.audit import SQLiteAuditRepository
 from app.repository.categories import SQLiteCategoryRepository
 from app.repository.database import Database
 from app.services.categories import CategoryService
+
+DESCRIPTION = """
+API REST de Digiverso con arquitectura de capas.
+
+## Módulos
+
+- **Autenticación**: registro, verificación de correo e inicio de sesión.
+- **Catálogo**: gestión del árbol de categorías.
+- **Root**: estado del servicio.
+
+Todas las respuestas usan el sobre `message`, `data` y `success`.
+"""
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -41,13 +54,43 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     application = FastAPI(
         title=settings.app_name,
+        description=DESCRIPTION,
         version="1.0.0",
-        debug=settings.debug,
+        contact={"name": "Soporte Digiverso", "email": "soporte@example.com"},
+        license_info={"name": "Proyecto académico"},
+        openapi_tags=[
+            {
+                "name": "Autenticación",
+                "description": "Registro de visitantes, verificación de cuenta y acceso.",
+            },
+            {
+                "name": "Catálogo · Categorías",
+                "description": "Creación, edición, desactivación y consulta del árbol.",
+            },
+            {
+                "name": "Root",
+                "description": "Información básica del servicio.",
+            },
+        ],
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
+        swagger_ui_parameters={
+            "deepLinking": True,
+            "displayRequestDuration": True,
+            "persistAuthorization": True,
+            "filter": True,
+            "tryItOutEnabled": True,
+        },
+        debug=settings.app_debug,
         lifespan=lifespan,
     )
 
+    # Manejadores de HU-01 (DomainError, HTTPException y Exception).
+    register_exception_handlers(application)
+
     @application.exception_handler(CatalogError)
-    async def handle_catalog_error(_: object, exc: CatalogError) -> JSONResponse:
+    async def handle_catalog_error(_: Request, exc: CatalogError) -> JSONResponse:
         return JSONResponse(
             status_code=exc.status_code,
             content=jsonable_encoder(
@@ -57,42 +100,68 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @application.exception_handler(RequestValidationError)
     async def handle_validation_error(
-        _: object, exc: RequestValidationError
+        request: Request, exc: RequestValidationError
     ) -> JSONResponse:
+        errores = exc.errors()
+        if request.url.path.startswith("/api/v1/auth"):
+            # Formato acordado en HU-01: 400 con campo/mensaje.
+            detalle = [
+                {
+                    "campo": ".".join(
+                        str(parte)
+                        for parte in error.get("loc", ())
+                        if parte not in {"body", "query", "path"}
+                    ),
+                    "mensaje": error.get("msg", "Dato inválido"),
+                }
+                for error in errores
+            ]
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "message": "La petición contiene datos inválidos.",
+                    "data": {"codigo": "validacion", "detalle": detalle},
+                    "success": False,
+                },
+            )
+
+        # Formato de catálogo: 422 con la lista original de errores.
         return JSONResponse(
             status_code=422,
             content={
                 "message": "Datos de la petición inválidos.",
-                "data": {"errores": jsonable_encoder(exc.errors())},
+                "data": {"errores": jsonable_encoder(errores)},
                 "success": False,
             },
         )
 
-    @application.exception_handler(StarletteHTTPException)
-    async def handle_http_error(
-        _: object, exc: StarletteHTTPException
-    ) -> JSONResponse:
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={
-                "message": str(exc.detail),
-                "data": {},
-                "success": False,
-            },
-        )
-
+    application.include_router(auth_router)
     application.include_router(categories_router)
 
     @application.get(
         "/",
-        tags=["Salud"],
+        tags=["Root"],
         response_model=ApiResponse[dict[str, str]],
-        summary="Comprobación de salud",
+        summary="Estado de la API",
     )
     def root() -> ApiResponse[dict[str, str]]:
-        return ok("Digiverso funcionando correctamente.", {"status": "ok"})
+        return ok(
+            "Digiverso funcionando correctamente.",
+            {"docs": "/docs", "version": "1.0.0", "status": "ok"},
+        )
 
     return application
 
 
 app = create_app()
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=default_settings.app_port,
+        reload=default_settings.app_debug,
+    )

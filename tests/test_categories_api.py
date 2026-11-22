@@ -121,7 +121,7 @@ def test_padre_inexistente(create_category: Callable[..., Any]):
 
 # FUN-18 --------------------------------------------------------------------
 def test_patch_actualiza_campos_y_mueve_subarbol(
-    client: TestClient, create_category: Callable[..., Any], service
+    client: TestClient, create_category: Callable[..., Any], category_service
 ):
     first_root = _id(create_category("Arte"))
     second_root = _id(create_category("Diseño"))
@@ -144,7 +144,7 @@ def test_patch_actualiza_campos_y_mueve_subarbol(
     assert data["padreId"] == second_root
     assert data["orden"] == 3
 
-    assert service.repository.get(grandchild).ruta == (
+    assert category_service.repository.get(grandchild).ruta == (
         f"/{second_root}/{child}/{grandchild}/"
     )
 
@@ -156,24 +156,24 @@ def test_patch_actualiza_campos_y_mueve_subarbol(
 
 # Caso 4 --------------------------------------------------------------------
 def test_desactivar_con_productos_activos_devuelve_409(
-    client: TestClient, create_category: Callable[..., Any], service
+    client: TestClient, create_category: Callable[..., Any], category_service
 ):
     category_id = _id(create_category("Fotografía"))
-    service.repository.add_product("prod_100", category_id)
+    category_service.repository.add_product("prod_100", category_id)
 
     response = client.delete(f"{CATEGORIES_URL}/{category_id}")
 
     assert response.status_code == 409
     assert _body(response)["data"]["productosActivos"] == 1
-    assert service.repository.get(category_id).estado == "activa"
+    assert category_service.repository.get(category_id).estado == "activa"
 
 
 def test_producto_activo_en_descendiente_tambien_bloquea(
-    client: TestClient, create_category: Callable[..., Any], service
+    client: TestClient, create_category: Callable[..., Any], category_service
 ):
     root = _id(create_category("Arte"))
     child = _id(create_category("Fotografía", padre_id=root))
-    service.repository.add_product("prod_101", child)
+    category_service.repository.add_product("prod_101", child)
 
     response = client.delete(f"{CATEGORIES_URL}/{root}")
 
@@ -181,7 +181,7 @@ def test_producto_activo_en_descendiente_tambien_bloquea(
 
 
 def test_desactivar_sin_productos_es_logico_y_se_audita(
-    client: TestClient, create_category: Callable[..., Any], service
+    client: TestClient, create_category: Callable[..., Any], category_service
 ):
     headers = {"X-Actor-Id": "usr_002", "X-Actor-Roles": "administrador"}
     category_id = _id(create_category("Escultura", headers=headers))
@@ -191,10 +191,10 @@ def test_desactivar_sin_productos_es_logico_y_se_audita(
     assert response.status_code == 200
     data = _body(response)["data"]
     assert data["estado"] == "inactiva"
-    assert service.repository.get(category_id) is not None
+    assert category_service.repository.get(category_id) is not None
     assert all(node["id"] != category_id for node in _body(client.get(CATEGORIES_URL))["data"])
 
-    events = service.audit_repository.list_for_entity(category_id)
+    events = category_service.audit_repository.list_for_entity(category_id)
     assert [event["accion"] for event in events] == ["crear", "desactivar"]
     assert {event["actorId"] for event in events} == {"usr_002"}
 
@@ -232,10 +232,10 @@ def test_arbol_esta_ordenado_por_orden(create_category: Callable[..., Any], clie
 
 # Cache, permisos y errores --------------------------------------------------
 def test_cache_se_invalida_en_cada_escritura(
-    client: TestClient, create_category: Callable[..., Any], service
+    client: TestClient, create_category: Callable[..., Any], category_service
 ):
-    spy = FakeCache(service.cache)
-    service.cache = spy
+    spy = FakeCache(category_service.cache)
+    category_service.cache = spy
 
     client.get(CATEGORIES_URL)
     assert spy.invalidations == 0
