@@ -1,7 +1,7 @@
 # Digiverso API
 
-API del marketplace Digiverso. Actualmente incluye el módulo **Catálogo · Categorías**
-(HU-07, FUN-17 a FUN-20).
+API del marketplace Digiverso. Incluye los módulos **Catálogo · Categorías**
+(HU-07, FUN-17 a FUN-20) y **Catálogo · Productos** (HU-08, FUN-21 a FUN-25).
 
 ## Instalación y ejecución
 
@@ -29,5 +29,23 @@ pytest -q
 | `DELETE` | `/api/v1/catalog/categories/{id}` | Desactivación lógica (200) |
 | `GET` | `/api/v1/catalog/categories` | Árbol de categorías activas (200) |
 
+Documentación funcional: [`docs/HU-07_gestion_de_categorias.md`](docs/HU-07_gestion_de_categorias.md).
+
+## Endpoints de productos
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `POST` | `/api/v1/catalog/products` | Crear producto en borrador (201) |
+| `PATCH` | `/api/v1/catalog/products/{id}` | Editar producto propio (200) |
+| `POST` | `/api/v1/catalog/products/{id}/submit-review` | Enviar a revisión (200) |
+| `PATCH` | `/api/v1/catalog/products/{id}/archive` | Archivar y retirar de la vitrina (200) |
+| `PATCH` | `/api/v1/catalog/products/{id}/reactivate` | Publicar o enviar a revisión (200) |
+| `GET` | `/api/v1/catalog/products` | Vitrina de productos publicados (200) |
+| `GET` | `/api/v1/catalog/products/{id}` | Detalle de un producto (200) |
+
+El autor se obtiene del token (`Authorization: Bearer <token>`) o, mientras se
+integra la autenticación, de las cabeceras `X-Actor-Id` / `X-Actor-Roles`.
+Documentación funcional y ciclo de vida:
+[`docs/HU-08_producto_creacion_edicion_y_ciclo_de_vida.md`](docs/HU-08_producto_creacion_edicion_y_ciclo_de_vida.md).
+
 Todas las respuestas usan el sobre `{ "message", "data", "success" }`.
-La documentación funcional detallada está en [`docs/HU-07_gestion_de_categorias.md`](docs/HU-07_gestion_de_categorias.md).

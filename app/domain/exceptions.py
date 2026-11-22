@@ -50,3 +50,23 @@ class CategoryCycleError(CatalogError):
 class CategoryHasActiveProductsError(CatalogError):
     status_code = 409
     code = "CATEGORY_ACTIVE_PRODUCTS"
+
+
+# ------------------------------------------------------------------ HU-08
+class InvalidProductError(CatalogError):
+    status_code = 422
+    code = "PRODUCT_INVALID"
+
+
+class InsufficientProductMediaError(InvalidProductError):
+    code = "PRODUCT_MEDIA_REQUIRED"
+
+
+class ProductNotFoundError(CatalogError):
+    status_code = 404
+    code = "PRODUCT_NOT_FOUND"
+
+
+class InvalidProductStateError(CatalogError):
+    status_code = 409
+    code = "PRODUCT_INVALID_STATE"

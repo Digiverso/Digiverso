@@ -28,16 +28,45 @@ CREATE INDEX IF NOT EXISTS idx_categories_ruta ON categories(ruta);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_categories_nombre_padre
     ON categories(COALESCE(padre_id, ''), nombre_normalizado);
 
--- Contrato mínimo con HU-08: permite comprobar que una categoría con
--- productos activos no puede desactivarse. No sustituye al módulo de productos.
+-- Productos (HU-08). ``categoria_id`` conserva el contrato usado por HU-07
+-- para comprobar que una categoría con productos activos no puede desactivarse;
+-- ``categorias`` guarda la lista completa declarada por el productor.
 CREATE TABLE IF NOT EXISTS productos (
-    id           TEXT PRIMARY KEY,
-    categoria_id TEXT NOT NULL REFERENCES categories(id),
-    estado       TEXT NOT NULL DEFAULT 'publicado',
-    activo       INTEGER NOT NULL DEFAULT 1 CHECK (activo IN (0, 1))
+    id                 TEXT PRIMARY KEY,
+    categoria_id       TEXT NOT NULL REFERENCES categories(id),
+    estado             TEXT NOT NULL DEFAULT 'borrador'
+        CHECK (estado IN ('borrador', 'en_revision', 'publicado', 'rechazado', 'archivado')),
+    activo             INTEGER NOT NULL DEFAULT 0 CHECK (activo IN (0, 1)),
+    nombre             TEXT NOT NULL DEFAULT '',
+    descripcion        TEXT NOT NULL DEFAULT '',
+    precio             INTEGER NOT NULL DEFAULT 0,
+    moneda             TEXT NOT NULL DEFAULT 'COP',
+    edad_minima        INTEGER NOT NULL DEFAULT 0,
+    edad_maxima        INTEGER NOT NULL DEFAULT 99,
+    categorias         TEXT NOT NULL DEFAULT '[]',
+    medios             TEXT NOT NULL DEFAULT '[]',
+    autor_id           TEXT NOT NULL DEFAULT '',
+    creado_en          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    actualizado_en     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    estado_desde       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    archivado_en       TEXT,
+    archivo_hash       TEXT,
+    cambios_pendientes INTEGER NOT NULL DEFAULT 0 CHECK (cambios_pendientes IN (0, 1))
 );
 
 CREATE INDEX IF NOT EXISTS idx_productos_categoria ON productos(categoria_id);
+
+-- Las licencias pertenecen a HU-15; HU-08 solo garantiza que archivar no las
+-- altera. Se crea la tabla para poder comprobar esa invariante.
+CREATE TABLE IF NOT EXISTS licencias (
+    id          TEXT PRIMARY KEY,
+    producto_id TEXT NOT NULL REFERENCES productos(id) ON DELETE CASCADE,
+    tipo        TEXT NOT NULL,
+    vigente     INTEGER NOT NULL DEFAULT 1 CHECK (vigente IN (0, 1)),
+    creado_en   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_licencias_producto ON licencias(producto_id);
 
 CREATE TABLE IF NOT EXISTS audit_log (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,6 +83,28 @@ CREATE INDEX IF NOT EXISTS idx_audit_entidad ON audit_log(entidad_id);
 """
 
 
+# Columnas añadidas en HU-08 a una tabla ``productos`` creada por HU-07.
+# SQLite no permite ``ALTER TABLE ... IF NOT EXISTS``, por lo que se aplican de
+# forma idempotente consultando ``PRAGMA table_info``.
+_PRODUCT_MIGRATIONS: tuple[tuple[str, str], ...] = (
+    ("nombre", "TEXT NOT NULL DEFAULT ''"),
+    ("descripcion", "TEXT NOT NULL DEFAULT ''"),
+    ("precio", "INTEGER NOT NULL DEFAULT 0"),
+    ("moneda", "TEXT NOT NULL DEFAULT 'COP'"),
+    ("edad_minima", "INTEGER NOT NULL DEFAULT 0"),
+    ("edad_maxima", "INTEGER NOT NULL DEFAULT 99"),
+    ("categorias", "TEXT NOT NULL DEFAULT '[]'"),
+    ("medios", "TEXT NOT NULL DEFAULT '[]'"),
+    ("autor_id", "TEXT NOT NULL DEFAULT ''"),
+    ("creado_en", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"),
+    ("actualizado_en", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"),
+    ("estado_desde", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"),
+    ("archivado_en", "TEXT"),
+    ("archivo_hash", "TEXT"),
+    ("cambios_pendientes", "INTEGER NOT NULL DEFAULT 0"),
+)
+
+
 class Database:
     """Fábrica de conexiones SQLite con inicialización idempotente."""
 
@@ -62,6 +113,22 @@ class Database:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connection() as connection:
             connection.executescript(SCHEMA)
+            existing = {
+                row["name"] for row in connection.execute("PRAGMA table_info(productos)")
+            }
+            for column, definition in _PRODUCT_MIGRATIONS:
+                if column not in existing:
+                    connection.execute(
+                        f"ALTER TABLE productos ADD COLUMN {column} {definition}"
+                    )
+            # Estos índices dependen de columnas añadidas arriba, por lo que no
+            # pueden formar parte del ``executescript`` inicial.
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_productos_estado ON productos(estado)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_productos_autor ON productos(autor_id)"
+            )
 
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:

@@ -88,6 +88,19 @@ class Settings:
     require_explicit_actor: bool = False
     default_actor_id: str = "usr_admin"
 
+    # Catálogo (HU-08). Los valores numéricos de CAT-03/09/11/12/13 no estaban
+    # definidos en el repositorio; se fijan aquí y son sobreescribibles por .env.
+    product_min_price: int = 3500  # CAT-01
+    product_currency: str = "COP"
+    product_max_age: int = 99  # CAT-03
+    product_min_images: int = 1  # CAT-09
+    product_name_min_length: int = 2  # CAT-11
+    product_name_max_length: int = 120  # CAT-11
+    product_description_min_length: int = 1  # CAT-12
+    product_description_max_length: int = 2000  # CAT-12
+    product_max_categories: int = 5  # CAT-13
+    actor_token_ttl_seconds: int = 3600
+
     @property
     def debug(self) -> bool:
         """Alias de ``app_debug`` usado por el factory de aplicación."""
@@ -142,6 +155,16 @@ def load_settings() -> Settings:
         category_description_max_length=int(value("CAT_17_DESCRIPTION_MAX", "500")),
         require_explicit_actor=_as_bool(value("REQUIRE_EXPLICIT_ACTOR", "false")),
         default_actor_id=value("DEFAULT_ADMIN_ACTOR_ID", "usr_admin"),
+        product_min_price=int(value("CAT_01_MIN_PRICE", "3500")),
+        product_currency=value("CAT_01_CURRENCY", "COP").strip().upper(),
+        product_max_age=int(value("CAT_03_MAX_AGE", "99")),
+        product_min_images=int(value("CAT_09_MIN_IMAGES", "1")),
+        product_name_min_length=int(value("CAT_11_MIN_LENGTH", "2")),
+        product_name_max_length=int(value("CAT_11_MAX_LENGTH", "120")),
+        product_description_min_length=int(value("CAT_12_MIN_LENGTH", "1")),
+        product_description_max_length=int(value("CAT_12_MAX_LENGTH", "2000")),
+        product_max_categories=int(value("CAT_13_MAX_CATEGORIES", "5")),
+        actor_token_ttl_seconds=int(value("ACTOR_TOKEN_TTL_SECONDS", "3600")),
     )
 
 
