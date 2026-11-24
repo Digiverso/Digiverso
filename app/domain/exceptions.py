@@ -70,3 +70,9 @@ class ProductNotFoundError(CatalogError):
 class InvalidProductStateError(CatalogError):
     status_code = 409
     code = "PRODUCT_INVALID_STATE"
+
+
+# ------------------------------------------------------------------ HU-10
+class InvalidCatalogQueryError(CatalogError):
+    status_code = 422
+    code = "CATALOG_QUERY_INVALID"

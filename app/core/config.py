@@ -113,6 +113,9 @@ class Settings:
     product_description_min_length: int = 1  # CAT-12
     product_description_max_length: int = 2000  # CAT-12
     product_max_categories: int = 5  # CAT-13
+    # Catálogo · búsqueda y vitrina (HU-10)
+    catalog_default_page_size: int = 20
+    catalog_max_page_size: int = 100
     actor_token_ttl_seconds: int = 3600
 
     @property
@@ -193,6 +196,8 @@ def load_settings() -> Settings:
         product_description_min_length=int(value("CAT_12_MIN_LENGTH", "1")),
         product_description_max_length=int(value("CAT_12_MAX_LENGTH", "2000")),
         product_max_categories=int(value("CAT_13_MAX_CATEGORIES", "5")),
+        catalog_default_page_size=int(value("CATALOG_DEFAULT_PAGE_SIZE", "20")),
+        catalog_max_page_size=int(value("CATALOG_MAX_PAGE_SIZE", "100")),
         actor_token_ttl_seconds=int(value("ACTOR_TOKEN_TTL_SECONDS", "3600")),
     )
 

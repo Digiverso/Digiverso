@@ -13,7 +13,9 @@ from app.api.auth_router import router as auth_router
 from app.api.errors import register_exception_handlers
 from app.api.v1.categories import router as categories_router
 from app.api.v1.products import router as products_router
+from app.api.v1.showcase import router as showcase_router
 from app.cache.category_tree import InMemoryCategoryTreeCache
+from app.cache.showcase import InMemoryShowcaseCache
 from app.core.config import Settings, get_settings, settings as default_settings
 from app.core.responses import ApiResponse, ok
 from app.domain.exceptions import CatalogError
@@ -21,6 +23,7 @@ from app.repository.audit import SQLiteAuditRepository
 from app.repository.categories import SQLiteCategoryRepository
 from app.repository.database import Database
 from app.repository.products import SQLiteProductRepository
+from app.repository.auth_repository import auth_repository
 from app.services.categories import CategoryService
 from app.services.products import ProductService
 
@@ -58,6 +61,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             category_repository=SQLiteCategoryRepository(database),
             audit_repository=SQLiteAuditRepository(database),
             settings=settings,
+            showcase_cache=InMemoryShowcaseCache(),
+            author_name_provider=lambda user_id: (
+                account.nombre
+                if (account := auth_repository.obtener_cuenta_por_id(user_id))
+                else None
+            ),
         )
         yield
 
@@ -79,6 +88,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             {
                 "name": "Catálogo · Productos",
                 "description": "Creación, edición, revisión, archivo y reactivación.",
+            },
+            {
+                "name": "Catálogo · Búsqueda y vitrina",
+                "description": "Búsqueda, filtros, vitrina por categoría y detalle público.",
             },
             {
                 "name": "Root",
@@ -151,6 +164,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(auth_router)
     application.include_router(categories_router)
     application.include_router(products_router)
+    application.include_router(showcase_router)
 
     @application.get(
         "/",
