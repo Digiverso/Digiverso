@@ -7,7 +7,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.domain.category import Category
-from app.domain.product import Product
+from app.domain.product import MEDIO_ELIMINADO, Medio, Product
 
 
 class CategoryNode(BaseModel):
@@ -113,6 +113,7 @@ class MedioResponse(BaseModel):
     tipo: str
     url: str
     orden: int = 0
+    estado: str = "activo"
 
 
 class ProductResponse(BaseModel):
@@ -150,9 +151,14 @@ class ProductResponse(BaseModel):
             autor_id=product.autor_id,
             medios=[
                 MedioResponse(
-                    id=medio.id, tipo=medio.tipo, url=medio.url, orden=medio.orden
+                    id=medio.id,
+                    tipo=medio.tipo,
+                    url=medio.url,
+                    orden=medio.orden,
+                    estado=medio.estado,
                 )
                 for medio in product.medios
+                if medio.visible
             ],
             creado_en=product.creado_en,
             actualizado_en=product.actualizado_en,
@@ -188,3 +194,40 @@ class ProductTransition(ProductResponse):
 
 ProductResponse.model_rebuild()
 ProductTransition.model_rebuild()
+
+
+# ------------------------------------------------------------ HU-09 (SUB-10)
+class MediaUploadResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    producto_id: str = Field(alias="productoId")
+    tipo: str
+    url: str
+    orden: int
+    estado: str
+
+    @classmethod
+    def from_medio(cls, producto_id: str, medio: Medio) -> MediaUploadResponse:
+        return cls(
+            id=medio.id,
+            producto_id=producto_id,
+            tipo=medio.tipo,
+            url=medio.url,
+            orden=medio.orden,
+            estado=medio.estado,
+        )
+
+
+class MediaDeleteResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    producto_id: str = Field(alias="productoId")
+    estado: str = MEDIO_ELIMINADO
+    total_medios: int = Field(alias="totalMedios")
+    medios: list[MedioResponse]
+
+
+MediaUploadResponse.model_rebuild()
+MediaDeleteResponse.model_rebuild()

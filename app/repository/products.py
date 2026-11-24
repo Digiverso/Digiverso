@@ -8,7 +8,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
-from app.domain.product import ESTADO_PUBLICADO, Medio, Product
+from app.domain.product import ESTADO_PUBLICADO, MEDIO_ACTIVO, Medio, Product
 from app.repository.database import Database
 
 
@@ -37,6 +37,7 @@ def _medios_from_json(raw: str | None) -> list[Medio]:
             tipo=str(item.get("tipo", "imagen")),
             url=str(item.get("url", "")),
             orden=int(item.get("orden", 0) or 0),
+            estado=str(item.get("estado", MEDIO_ACTIVO) or MEDIO_ACTIVO),
         )
         for item in items
         if isinstance(item, dict)
@@ -122,6 +123,25 @@ class SQLiteProductRepository:
                 """
             ).fetchone()
         return f"prod_{int(row['next_number']):03d}"
+
+    def next_media_id(self) -> str:
+        """Siguiente ``med_XXX`` libre considerando también medios eliminados."""
+
+        with self.database.connection() as connection:
+            rows = connection.execute("SELECT medios FROM productos").fetchall()
+        mayor = 0
+        for row in rows:
+            try:
+                medios = json.loads(row["medios"] or "[]")
+            except (TypeError, ValueError):
+                continue
+            for medio in medios if isinstance(medios, list) else []:
+                if not isinstance(medio, dict):
+                    continue
+                identificador = str(medio.get("id") or "")
+                if identificador.startswith("med_") and identificador[4:].isdigit():
+                    mayor = max(mayor, int(identificador[4:]))
+        return f"med_{mayor + 1:03d}"
 
     # ---------------------------------------------------------------- escritura
     def _values(self, product: Product) -> tuple[Any, ...]:

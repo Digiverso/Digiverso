@@ -50,6 +50,22 @@ ESTADOS_ARCHIVABLES = frozenset(
 TIPOS_MEDIO = ("imagen", "video", "documento")
 _ALIAS_TIPOS_MEDIO = {"image": "imagen", "images": "imagen", "video": "video", "document": "documento"}
 
+# FUN-26/FUN-27: ciclo de estado de un medio. ``en_analisis`` y ``rechazado``
+# son estados de tránsito del escaneo; solo ``activo`` y ``eliminado`` se
+# persisten. Los medios eliminados siguen en la lista (borrado lógico) pero no
+# cuentan para CAT-10 ni aparecen en la ficha del producto.
+MEDIO_EN_ANALISIS = "en_analisis"
+MEDIO_ACTIVO = "activo"
+MEDIO_RECHAZADO = "rechazado"
+MEDIO_ELIMINADO = "eliminado"
+ESTADOS_MEDIO = (
+    MEDIO_EN_ANALISIS,
+    MEDIO_ACTIVO,
+    MEDIO_RECHAZADO,
+    MEDIO_ELIMINADO,
+)
+MEDIOS_VISIBLES = frozenset({MEDIO_EN_ANALISIS, MEDIO_ACTIVO})
+
 
 def _es_entero(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
@@ -61,10 +77,15 @@ class Medio:
     tipo: str = "imagen"
     id: str | None = None
     orden: int = 0
+    estado: str = MEDIO_ACTIVO
 
     @property
     def es_imagen(self) -> bool:
         return self.tipo == "imagen"
+
+    @property
+    def visible(self) -> bool:
+        return self.estado in MEDIOS_VISIBLES
 
 
 def build_medio(value: object) -> Medio:
@@ -105,11 +126,19 @@ def build_medio(value: object) -> Medio:
             details={"orden": orden},
         )
 
+    estado = str(value.get("estado", MEDIO_ACTIVO) or MEDIO_ACTIVO).strip().lower()
+    if estado not in ESTADOS_MEDIO:
+        raise InvalidProductError(
+            "El estado del medio no es válido.",
+            details={"estado": estado, "permitidos": list(ESTADOS_MEDIO)},
+        )
+
     return Medio(
         id=str(value["id"]) if value.get("id") else None,
         tipo=tipo,
         url=url,
         orden=int(orden),
+        estado=estado,
     )
 
 
@@ -293,6 +322,7 @@ class Product:
             "medios": [
                 {"id": medio.id, "tipo": medio.tipo, "url": medio.url, "orden": medio.orden}
                 for medio in self.medios
+                if medio.visible
             ],
         }
 

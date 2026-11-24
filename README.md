@@ -1,7 +1,8 @@
 # Digiverso API
 
 API del marketplace Digiverso. Incluye los módulos **Catálogo · Categorías**
-(HU-07, FUN-17 a FUN-20) y **Catálogo · Productos** (HU-08, FUN-21 a FUN-25).
+(HU-07, FUN-17 a FUN-20), **Catálogo · Productos** (HU-08, FUN-21 a FUN-25) y
+**Catálogo · Medios del producto** (HU-09, FUN-26 y FUN-27).
 
 ## Instalación y ejecución
 
@@ -47,5 +48,15 @@ El autor se obtiene del token (`Authorization: Bearer <token>`) o, mientras se
 integra la autenticación, de las cabeceras `X-Actor-Id` / `X-Actor-Roles`.
 Documentación funcional y ciclo de vida:
 [`docs/HU-08_producto_creacion_edicion_y_ciclo_de_vida.md`](docs/HU-08_producto_creacion_edicion_y_ciclo_de_vida.md).
+
+## Endpoints de medios del producto
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `POST` | `/api/v1/catalog/products/{id}/media` | Cargar imagen o video (201) |
+| `DELETE` | `/api/v1/catalog/products/{id}/media/{mediaId}` | Eliminar medio y reordenar (200) |
+
+Documentación funcional:
+[`docs/HU-09_medios_del_producto.md`](docs/HU-09_medios_del_producto.md).
 
 Todas las respuestas usan el sobre `{ "message", "data", "success" }`.

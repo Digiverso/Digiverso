@@ -12,6 +12,7 @@ from starlette.responses import JSONResponse
 from app.api.auth_router import router as auth_router
 from app.api.errors import register_exception_handlers
 from app.api.v1.categories import router as categories_router
+from app.api.v1.media import router as media_router
 from app.api.v1.products import router as products_router
 from app.cache.category_tree import InMemoryCategoryTreeCache
 from app.core.config import Settings, get_settings, settings as default_settings
@@ -22,6 +23,7 @@ from app.repository.categories import SQLiteCategoryRepository
 from app.repository.database import Database
 from app.repository.products import SQLiteProductRepository
 from app.services.categories import CategoryService
+from app.services.media import MediaService
 from app.services.products import ProductService
 
 DESCRIPTION = """
@@ -30,7 +32,7 @@ API REST de Digiverso con arquitectura de capas.
 ## Módulos
 
 - **Autenticación**: registro, verificación de correo e inicio de sesión.
-- **Catálogo**: gestión del árbol de categorías y ciclo de vida de productos.
+- **Catálogo**: árbol de categorías, ciclo de vida de productos y medios del producto.
 - **Root**: estado del servicio.
 
 Todas las respuestas usan el sobre `message`, `data` y `success`.
@@ -53,10 +55,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             cache=InMemoryCategoryTreeCache(),
             settings=settings,
         )
+        product_repository = SQLiteProductRepository(database)
+        audit_repository = SQLiteAuditRepository(database)
         application.state.product_service = ProductService(
-            repository=SQLiteProductRepository(database),
+            repository=product_repository,
             category_repository=SQLiteCategoryRepository(database),
-            audit_repository=SQLiteAuditRepository(database),
+            audit_repository=audit_repository,
+            settings=settings,
+        )
+        application.state.media_service = MediaService(
+            repository=product_repository,
+            audit_repository=audit_repository,
             settings=settings,
         )
         yield
@@ -79,6 +88,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             {
                 "name": "Catálogo · Productos",
                 "description": "Creación, edición, revisión, archivo y reactivación.",
+            },
+            {
+                "name": "Catálogo · Medios del producto",
+                "description": "Carga y eliminación lógica de imágenes y videos.",
             },
             {
                 "name": "Root",
@@ -107,7 +120,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse(
             status_code=exc.status_code,
             content=jsonable_encoder(
-                {"message": exc.message, "data": exc.details, "success": False}
+                {
+                    "message": exc.message,
+                    "data": {"codigo": exc.code, **exc.details},
+                    "success": False,
+                }
             ),
         )
 
@@ -151,6 +168,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(auth_router)
     application.include_router(categories_router)
     application.include_router(products_router)
+    application.include_router(media_router)
 
     @application.get(
         "/",

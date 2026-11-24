@@ -43,6 +43,10 @@ def _as_bool(value: str) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _as_tuple(value: str) -> tuple[str, ...]:
+    return tuple(item.strip().lower() for item in value.split(",") if item.strip())
+
+
 @dataclass(frozen=True)
 class Settings:
     """Parámetros de ejecución de todos los módulos implementados.
@@ -114,6 +118,22 @@ class Settings:
     product_description_max_length: int = 2000  # CAT-12
     product_max_categories: int = 5  # CAT-13
     actor_token_ttl_seconds: int = 3600
+
+    # Catálogo (HU-09). CAT-05/06/07/08/10 no tenían valores numéricos en el
+    # repositorio: se fijan aquí y se sobreescriben desde .env.
+    media_image_formats: tuple[str, ...] = ("jpg", "png", "webp")  # CAT-05
+    media_video_formats: tuple[str, ...] = ("mp4", "mov", "webm")  # CAT-07
+    media_max_image_bytes: int = 10 * 1024 * 1024  # CAT-06
+    media_max_video_bytes: int = 200 * 1024 * 1024  # CAT-08
+    media_max_per_product: int = 10  # CAT-10
+    media_storage_dir: Path = Path("uploads/media")
+    media_url_base: str = "https://cdn.digiverso.com/products"
+
+    @property
+    def media_max_read_bytes(self) -> int:
+        """Tope de lectura del cuerpo: basta para detectar CAT-06/CAT-08."""
+
+        return max(self.media_max_image_bytes, self.media_max_video_bytes) + 1
 
     @property
     def debug(self) -> bool:
@@ -194,6 +214,15 @@ def load_settings() -> Settings:
         product_description_max_length=int(value("CAT_12_MAX_LENGTH", "2000")),
         product_max_categories=int(value("CAT_13_MAX_CATEGORIES", "5")),
         actor_token_ttl_seconds=int(value("ACTOR_TOKEN_TTL_SECONDS", "3600")),
+        media_image_formats=_as_tuple(value("CAT_05_IMAGE_FORMATS", "jpg,png,webp")),
+        media_video_formats=_as_tuple(value("CAT_07_VIDEO_FORMATS", "mp4,mov,webm")),
+        media_max_image_bytes=int(value("CAT_06_MAX_IMAGE_BYTES", str(10 * 1024 * 1024))),
+        media_max_video_bytes=int(value("CAT_08_MAX_VIDEO_BYTES", str(200 * 1024 * 1024))),
+        media_max_per_product=int(value("CAT_10_MAX_MEDIA", "10")),
+        media_storage_dir=Path(value("MEDIA_STORAGE_DIR", "uploads/media")).expanduser(),
+        media_url_base=value(
+            "MEDIA_URL_BASE", "https://cdn.digiverso.com/products"
+        ).rstrip("/"),
     )
 
 

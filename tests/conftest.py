@@ -25,6 +25,7 @@ from app.repository.email_repository import EmailDelivery
 from app.repository.products import SQLiteProductRepository
 from app.services.auth_service import AuthService
 from app.services.categories import CategoryService
+from app.services.media import MediaService
 from app.services.products import ProductService
 
 CATEGORIES_URL = "/api/v1/catalog/categories"
@@ -153,6 +154,8 @@ def category_settings(tmp_path: Path) -> Settings:
         category_description_max_length=500,
         require_explicit_actor=False,
         default_actor_id="usr_admin",
+        media_storage_dir=tmp_path / "media",
+        media_url_base="https://cdn.test/products",
     )
 
 
@@ -230,12 +233,24 @@ def create_product(client: TestClient) -> Callable[..., Any]:
     return _create
 
 
+# ---------------------------------------------------------------- HU-09
+@pytest.fixture()
+def media_service(category_settings: Settings) -> MediaService:
+    database = Database(category_settings.database_path)
+    return MediaService(
+        repository=SQLiteProductRepository(database),
+        audit_repository=SQLiteAuditRepository(database),
+        settings=category_settings,
+    )
+
+
 # ------------------------------------------------------------- compartido
 @pytest.fixture()
 def client(
     service: AuthService,
     category_service: CategoryService,
     product_service: ProductService,
+    media_service: MediaService,
     category_settings: Settings,
 ) -> TestClient:
     auth_repository.reset()
@@ -246,5 +261,6 @@ def client(
         # poder inspeccionar repositorio, caché y auditoría desde las pruebas.
         test_client.app.state.category_service = category_service
         test_client.app.state.product_service = product_service
+        test_client.app.state.media_service = media_service
         yield test_client
     test_app.dependency_overrides.clear()
