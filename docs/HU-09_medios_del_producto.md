@@ -127,11 +127,15 @@ incluyen `data.codigo` y, según el caso, `permitidos`, `tamanoBytes`,
   real. El escaneo ocurre **antes** de crear el medio activo o escribir el URL.
 - **Borrado lógico y orden:** el medio eliminado permanece en el JSON del
   producto con `estado = "eliminado"`; no cuenta para CAT-10, no aparece en la
-  ficha (`GET /products/{id}`) y los visibles pasan a `orden = 1..N`. El archivo
+  ficha (`GET /products/{id}`) y los visibles pasan a `orden = 1..N`. La ficha
+  pública (HU-10) devuelve los medios visibles ordenados por `orden`. El archivo
   físico se conserva.
 - **Hash de contenido:** `Product.content()` ignora los medios eliminados, por
   lo que una eliminación se detecta como cambio al reactivar un producto
   archivado (HU-08).
+- **Integración con HU-10:** la miniatura de la vitrina se deriva del primer
+  medio visible, por lo que `MediaService` comparte el `ShowcaseCache` con
+  `ProductService` y lo invalida al cargar o eliminar un medio.
 - **Persistencia:** se reutiliza la columna `medios` de `productos` (JSON), sin
   migraciones nuevas. Los identificadores `med_XXX` se generan en
   `SQLiteProductRepository.next_media_id()`.
@@ -161,5 +165,6 @@ pytest -q
 
 `tests/test_media_domain.py` cubre firmas, límites, conteo y reordenamiento;
 `tests/test_media_api.py` cubre los cinco casos de la historia más autoría,
-estado editable, extensión engañosa, escaneo y auditoría. La suite completa
-pasa con 92 pruebas.
+estado editable, extensión engañosa, escaneo, auditoría y la invalidación de la
+vitrina de HU-10. Tras integrar HU-06 y HU-10, la suite completa pasa con
+128 pruebas.

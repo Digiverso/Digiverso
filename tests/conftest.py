@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from app.api.dependencies import get_auth_service
 from app.cache.auth_parameters import InMemoryAuthParametersCache
 from app.cache.category_tree import InMemoryCategoryTreeCache
+from app.cache.showcase import InMemoryShowcaseCache
 from app.core.config import Settings, load_settings
 from app.core.rate_limit import RateLimiter
 from app.core.security import SessionTokenManager, VerificationTokenManager
@@ -208,13 +209,21 @@ def create_category(client: TestClient) -> Callable[..., Any]:
 
 # ---------------------------------------------------------------- HU-08
 @pytest.fixture()
-def product_service(category_settings: Settings) -> ProductService:
+def showcase_cache() -> InMemoryShowcaseCache:
+    return InMemoryShowcaseCache()
+
+
+@pytest.fixture()
+def product_service(
+    category_settings: Settings, showcase_cache: InMemoryShowcaseCache
+) -> ProductService:
     database = Database(category_settings.database_path)
     return ProductService(
         repository=SQLiteProductRepository(database),
         category_repository=SQLiteCategoryRepository(database),
         audit_repository=SQLiteAuditRepository(database),
         settings=category_settings,
+        showcase_cache=showcase_cache,
     )
 
 
@@ -251,12 +260,15 @@ def create_product(client: TestClient) -> Callable[..., Any]:
 
 # ---------------------------------------------------------------- HU-09
 @pytest.fixture()
-def media_service(category_settings: Settings) -> MediaService:
+def media_service(
+    category_settings: Settings, showcase_cache: InMemoryShowcaseCache
+) -> MediaService:
     database = Database(category_settings.database_path)
     return MediaService(
         repository=SQLiteProductRepository(database),
         audit_repository=SQLiteAuditRepository(database),
         settings=category_settings,
+        showcase_cache=showcase_cache,
     )
 
 

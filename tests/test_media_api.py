@@ -7,7 +7,7 @@ from typing import Any, Callable
 
 from fastapi.testclient import TestClient
 
-from tests.conftest import PRODUCTS_URL
+from tests.conftest import CATEGORIES_URL, PRODUCTS_URL
 
 PRODUCTOR = {"X-Actor-Id": "usr_010", "X-Actor-Roles": "productor"}
 OTRO_PRODUCTOR = {"X-Actor-Id": "usr_011", "X-Actor-Roles": "productor"}
@@ -262,3 +262,38 @@ def test_carga_y_eliminacion_se_auditan(
     ]
     assert {evento["actorId"] for evento in eventos} == {"usr_010"}
     assert eventos[-1]["cambios"]["totalMedios"] == 0
+
+
+def test_cargar_medio_invalida_la_vitrina_de_hu10(
+    client: TestClient, create_product: Callable[..., Any], showcase_cache
+):
+    categoria_id = _body(
+        client.post(CATEGORIES_URL, json={"nombre": "Vitrina con medios"})
+    )["data"]["id"]
+    producto = create_product(
+        headers=PRODUCTOR, categoria_id=categoria_id, medios=[]
+    )
+    product_id = _body(producto)["data"]["id"]
+    assert client.patch(
+        f"{PRODUCTS_URL}/{product_id}/archive", headers=PRODUCTOR
+    ).status_code == 200
+    assert client.patch(
+        f"{PRODUCTS_URL}/{product_id}/reactivate", headers=PRODUCTOR
+    ).status_code == 200
+
+    assert client.get("/api/v1/catalog/showcase").status_code == 200
+    assert showcase_cache.get(categoria_id) is not None
+
+    respuesta = _subir(client, product_id)
+    assert respuesta.status_code == 201
+    url = _body(respuesta)["data"]["url"]
+    assert showcase_cache.get(categoria_id) is None
+
+    data = _body(client.get("/api/v1/catalog/showcase"))["data"]
+    producto_vitrina = next(
+        item
+        for grupo in data["categorias"]
+        for item in grupo["productos"]
+        if item["id"] == product_id
+    )
+    assert producto_vitrina["miniatura"] == url

@@ -130,3 +130,9 @@ class AuthParametersForbiddenError(ForbiddenError):
 class AuthParameterVersionNotFoundError(CatalogError):
     status_code = 404
     code = "AUTH_PARAMETER_VERSION_NOT_FOUND"
+
+
+# ------------------------------------------------------------------ HU-10
+class InvalidCatalogQueryError(CatalogError):
+    status_code = 422
+    code = "CATALOG_QUERY_INVALID"

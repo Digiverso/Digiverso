@@ -32,8 +32,8 @@ usan el sobre `message` / `data` / `success`.
 | FUN-23 | `POST` | `/products/{id}/submit-review` | `200`, estado `en_revision` |
 | FUN-24 | `PATCH` | `/products/{id}/archive` | `200`, estado `archivado` |
 | FUN-25 | `PATCH` | `/products/{id}/reactivate` | `200`, `publicado` u `en_revision` |
-| — | `GET` | `/products` | Vitrina (solo publicados y activos) |
-| — | `GET` | `/products/{id}` | Detalle del producto |
+| — | `GET` | `/products` | Búsqueda paginada (solo publicados y activos; HU-10) |
+| — | `GET` | `/products/{id}` | Detalle del producto (visibilidad en HU-10) |
 
 ### POST `/products` (FUN-21)
 

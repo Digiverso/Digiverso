@@ -5,8 +5,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Callable, Final
 
+from app.cache.showcase import ShowcaseCache
 from app.core.config import Settings
 from app.domain.actor import Actor
+from app.domain.catalog_search import ProductQuery, validate_query
 from app.domain.audit import AuditEvent
 from app.domain.exceptions import ForbiddenError, InvalidProductError, ProductNotFoundError
 from app.domain.product import (
@@ -45,12 +47,16 @@ class ProductService:
         audit_repository: SQLiteAuditRepository,
         settings: Settings,
         clock: Callable[[], datetime] | None = None,
+        showcase_cache: ShowcaseCache | None = None,
+        author_name_provider: Callable[[str], str | None] | None = None,
     ) -> None:
         self.repository = repository
         self.category_repository = category_repository
         self.audit_repository = audit_repository
         self.settings = settings
         self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self.showcase_cache = showcase_cache
+        self.author_name_provider = author_name_provider
 
     # --------------------------------------------------------------- helpers
     def _now(self) -> datetime:
@@ -75,6 +81,10 @@ class ProductService:
                     "actorId": actor.id,
                 },
             )
+
+    def _invalidate_showcase(self) -> None:
+        if self.showcase_cache is not None:
+            self.showcase_cache.invalidate()
 
     def _ensure_known_categories(self, categorias: list[str]) -> None:
         for category_id in categorias:
@@ -182,6 +192,7 @@ class ProductService:
         if nuevo_estado == ESTADO_ARCHIVADO:
             product.archivado_en = ahora
         self.repository.update(product)
+        self._invalidate_showcase()
         self._record(
             product,
             accion=accion,
@@ -225,10 +236,14 @@ class ProductService:
             medios=medios or [],
         )
         ahora = self._now()
+        nombre_autor = (
+            self.author_name_provider(actor.id) if self.author_name_provider else None
+        )
         product = Product(
             id=self.repository.next_id(),
             nombre=limpio["nombre"],
             descripcion=limpio["descripcion"],
+            autor_nombre=(nombre_autor or "Autor Digiverso").strip(),
             precio=limpio["precio"],
             moneda=limpio["moneda"],
             edad_minima=limpio["edad_minima"],
@@ -243,6 +258,7 @@ class ProductService:
             estado_desde=ahora,
         )
         self.repository.save(product)
+        self._invalidate_showcase()
         self._record(
             product,
             accion="crear",
@@ -309,6 +325,7 @@ class ProductService:
             product.cambios_pendientes = True
         product.actualizado_en = self._now()
         self.repository.update(product)
+        self._invalidate_showcase()
         after = self._snapshot(product)
         self._record(
             product,
@@ -378,13 +395,119 @@ class ProductService:
     def get(self, product_id: str) -> Product:
         return self._get(product_id)
 
+    def category_name(self, category_id: str | None) -> str | None:
+        if not category_id:
+            return None
+        category = self.category_repository.get(category_id)
+        return category.nombre if category else category_id
+
+    # ------------------------------------------------------ HU-10 (FUN-28/29)
+    def search(
+        self,
+        *,
+        q: str | None = None,
+        categoria: str | None = None,
+        edad: int | None = None,
+        precio_min: int | None = None,
+        precio_max: int | None = None,
+        orden: str | None = None,
+        pagina: int = 1,
+        tamanio_pagina: int | None = None,
+    ) -> tuple[list[Product], int, ProductQuery]:
+        """Busca publicados; devuelve página, total y la consulta normalizada."""
+
+        active_categories = frozenset(
+            category.id for category in self.category_repository.list_active()
+        )
+        consulta = validate_query(
+            q=q,
+            categoria=categoria,
+            edad=edad,
+            precio_min=precio_min,
+            precio_max=precio_max,
+            orden=orden,
+            pagina=pagina,
+            tamanio_pagina=(
+                self.settings.catalog_default_page_size
+                if tamanio_pagina is None
+                else tamanio_pagina
+            ),
+            max_age=self.settings.product_max_age,
+            min_price=self.settings.product_min_price,
+            max_page_size=self.settings.catalog_max_page_size,
+            known_categories=active_categories,
+        )
+        items, total = self.repository.search_products(consulta)
+        return items, total, consulta
+
+    # ------------------------------------------------------ HU-10 (FUN-30)
+    def showcase(self) -> tuple[list[tuple[str, str, list[Product]]], int]:
+        """Vitrina agrupada por categoría, con caché por categoría."""
+
+        productos = self.repository.list_showcase()
+        por_categoria: dict[str, list[Product]] = {}
+        for product in productos:
+            category_id = product.categoria_id or (
+                product.categorias[0] if product.categorias else ""
+            )
+            por_categoria.setdefault(category_id, []).append(product)
+
+        categorias = {
+            category.id: category for category in self.category_repository.list_active()
+        }
+        grupos: list[tuple[str, str, list[Product]]] = []
+        total = 0
+        for category_id, items in por_categoria.items():
+            cached = (
+                self.showcase_cache.get(category_id) if self.showcase_cache else None
+            )
+            if cached is not None:
+                visibles = cached
+            else:
+                visibles = items
+                if self.showcase_cache:
+                    self.showcase_cache.set(category_id, visibles)
+            category = categorias.get(category_id)
+            nombre = category.nombre if category else (category_id or "Sin categoría")
+            grupos.append((category_id, nombre, visibles))
+            total += len(visibles)
+
+        grupos.sort(key=lambda grupo: (-grupo[2][0].creado_en.timestamp(), grupo[0]))
+        return grupos, total
+
+    # ------------------------------------------------------ HU-10 (FUN-31)
+    def get_detail(
+        self, product_id: str, *, actor: Actor
+    ) -> tuple[Product, dict[str, Any] | None, bool]:
+        """Publicado para todos; no publicado solo para autor, admin o licenciado."""
+
+        product = self._get(product_id)
+        licencia = self.repository.active_license_for(product.id, actor.id)
+        privilegiado = actor.is_admin or actor.id == product.autor_id
+        if not product.publicado and not privilegiado and licencia is None:
+            raise ProductNotFoundError(
+                "El producto no existe o no está publicado.",
+                details={"id": product_id},
+            )
+        return product, licencia, privilegiado
+
     def active_licenses(self, product_id: str) -> int:
         return self.repository.count_active_licenses(product_id)
 
     def attach_license(
-        self, product_id: str, *, tipo: str = "estandar", license_id: str | None = None
+        self,
+        product_id: str,
+        *,
+        tipo: str = "estandar",
+        license_id: str | None = None,
+        actor_id: str | None = None,
     ) -> dict[str, Any]:
         """Utilidad de integración para otros submódulos (p. ej. HU-15)."""
 
         self._get(product_id)
-        return self.repository.add_license(product_id, tipo=tipo, license_id=license_id)
+        return self.repository.add_license(
+            product_id,
+            tipo=tipo,
+            license_id=license_id,
+            actor_id=actor_id,
+        )

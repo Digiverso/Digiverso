@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+from app.cache.showcase import ShowcaseCache
 from app.core.config import Settings
 from app.domain.actor import Actor
 from app.domain.audit import AuditEvent
@@ -52,10 +53,12 @@ class MediaService:
         processor: MediaProcessor | None = None,
         storage: MediaStorage | None = None,
         clock: Callable[[], datetime] | None = None,
+        showcase_cache: ShowcaseCache | None = None,
     ) -> None:
         self.repository = repository
         self.audit_repository = audit_repository
         self.settings = settings
+        self.showcase_cache = showcase_cache
         self.scanner = scanner or SignatureFileScanner()
         self.processor = processor or BestEffortMediaProcessor()
         self.storage = storage or LocalMediaStorage(settings)
@@ -111,6 +114,11 @@ class MediaService:
                 cambios=cambios,
             )
         )
+
+    def _invalidate_showcase(self) -> None:
+        """La miniatura de la vitrina (HU-10) depende de los medios visibles."""
+        if self.showcase_cache is not None:
+            self.showcase_cache.invalidate()
 
     @staticmethod
     def _detalle(medio: Medio) -> dict[str, Any]:
@@ -180,6 +188,7 @@ class MediaService:
         product.medios.append(medio)
         product.actualizado_en = self._now()
         self.repository.update(product)
+        self._invalidate_showcase()
         self._record(
             product,
             accion="cargar_medio",
@@ -220,6 +229,7 @@ class MediaService:
         )
         product.actualizado_en = self._now()
         self.repository.update(product)
+        self._invalidate_showcase()
         restantes = medios_activos(product.medios)
         self._record(
             product,

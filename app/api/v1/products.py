@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
 from app.api.deps import get_actor, get_product_service
 from app.api.schemas import (
     ProductCreateRequest,
     ProductResponse,
+    ProductSearchItem,
+    ProductSearchPage,
     ProductTransition,
     ProductUpdateRequest,
 )
@@ -180,38 +182,96 @@ def reactivate_product(
 
 @router.get(
     "",
-    response_model=ApiResponse[list[ProductResponse]],
-    summary="Vitrina de productos",
-    description="Devuelve únicamente los productos publicados y activos.",
+    response_model=ApiResponse[ProductSearchPage],
+    summary="Buscar productos (FUN-28 / PRC-28 y FUN-29 / PRC-29)",
+    description=(
+        "Busca únicamente productos publicados y activos. Acepta texto, "
+        "categoría, edad CAT-03, rango de precio CAT-01, orden y paginación. "
+        "Los filtros se combinan con AND; el índice incluye sinónimos y "
+        "tolerancia a errores tipográficos."
+    ),
+    responses=_ERROR_RESPONSES,
 )
-def list_showcase(
+def search_products(
+    q: str | None = Query(default=None, description="Término de búsqueda."),
+    categoria: str | None = Query(default=None, description="Identificador de categoría activa."),
+    edad: int | None = Query(default=None, ge=0, description="Edad CAT-03 del comprador."),
+    precio_min: int | None = Query(
+        default=None, alias="precioMin", description="Precio mínimo CAT-01 en COP."
+    ),
+    precio_max: int | None = Query(
+        default=None, alias="precioMax", description="Precio máximo CAT-01 en COP."
+    ),
+    orden: str | None = Query(
+        default=None,
+        description="relevancia | fecha_desc | fecha_asc | precio_asc | precio_desc",
+    ),
+    pagina: int = Query(default=1, ge=1, description="Página (base 1)."),
+    tamanio_pagina: int | None = Query(
+        default=None,
+        alias="tamanioPagina",
+        description="Tamaño de página; limitado por CATALOG_MAX_PAGE_SIZE.",
+    ),
     service: ProductService = Depends(get_product_service),
-) -> ApiResponse[list[ProductResponse]]:
+) -> ApiResponse[ProductSearchPage]:
+    productos, total, consulta = service.search(
+        q=q,
+        categoria=categoria,
+        edad=edad,
+        precio_min=precio_min,
+        precio_max=precio_max,
+        orden=orden,
+        pagina=pagina,
+        tamanio_pagina=tamanio_pagina,
+    )
+    nombres: dict[str, str | None] = {}
+    items: list[ProductSearchItem] = []
+    for product in productos:
+        category_id = product.categoria_id or (
+            product.categorias[0] if product.categorias else ""
+        )
+        if category_id not in nombres:
+            nombres[category_id] = service.category_name(category_id)
+        items.append(
+            ProductSearchItem.from_product(product, categoria=nombres[category_id])
+        )
     return ok(
-        "Vitrina de productos consultada correctamente.",
-        [
-            ProductResponse.from_product(
-                product, licencias_activas=service.active_licenses(product.id)
-            )
-            for product in service.list_showcase()
-        ],
+        "Búsqueda realizada correctamente.",
+        ProductSearchPage(
+            items=items,
+            total=total,
+            pagina=consulta.pagina,
+            tamanio_pagina=consulta.tamanio_pagina,
+        ),
     )
 
 
 @router.get(
     "/{product_id}",
     response_model=ApiResponse[ProductResponse],
-    summary="Consultar producto por identificador",
+    summary="Consultar detalle del producto (FUN-31 / PRC-31)",
+    description=(
+        "Muestra el detalle si el producto está publicado o si el actor tiene "
+        "licencia vigente, es su autor o es administrador. Los datos privados "
+        "del productor no se exponen a visitantes ni consumidores."
+    ),
     responses=_ERROR_RESPONSES,
 )
 def get_product(
     product_id: str,
     service: ProductService = Depends(get_product_service),
+    actor: Actor = Depends(get_actor),
 ) -> ApiResponse[ProductResponse]:
-    product = service.get(product_id)
+    product, licencia, privilegiado = service.get_detail(product_id, actor=actor)
     return ok(
         "Producto consultado correctamente.",
         ProductResponse.from_product(
-            product, licencias_activas=service.active_licenses(product.id)
+            product,
+            licencias_activas=service.active_licenses(product.id),
+            incluir_privados=privilegiado,
+            categoria=service.category_name(
+                product.categoria_id or (product.categorias[0] if product.categorias else None)
+            ),
+            licencia=licencia,
         ),
     )

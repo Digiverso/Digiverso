@@ -245,6 +245,25 @@ def validate_categorias(value: object, *, maximo: int) -> list[str]:
     return categorias
 
 
+def validate_calificacion(value: object) -> float:
+    """Calificación pública (0–5); ``0`` cuando aún no hay reseñas."""
+
+    if value is None:
+        return 0.0
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise InvalidProductError(
+            "La calificación debe ser un número entre 0 y 5.",
+            details={"campo": "calificacion", "valor": value},
+        )
+    calificacion = round(float(value), 1)
+    if calificacion < 0 or calificacion > 5:
+        raise InvalidProductError(
+            "La calificación debe estar entre 0 y 5.",
+            details={"campo": "calificacion", "valor": calificacion},
+        )
+    return calificacion
+
+
 def validate_medios(value: object) -> list[Medio]:
     if value is None:
         return []
@@ -290,6 +309,8 @@ class Product:
     precio: int
     autor_id: str
     categoria_id: str | None = None
+    autor_nombre: str = ""
+    calificacion: float = 0.0
     moneda: str = MONEDA_POR_DEFECTO
     edad_minima: int = 0
     edad_maxima: int = 99
@@ -307,6 +328,15 @@ class Product:
     @property
     def publicado(self) -> bool:
         return self.estado == ESTADO_PUBLICADO and self.activo
+
+    @property
+    def miniatura(self) -> str | None:
+        """Primera imagen declarada; se usa en la vitrina y en la búsqueda."""
+
+        for medio in sorted(self.medios, key=lambda item: item.orden):
+            if medio.es_imagen:
+                return medio.url
+        return None
 
     def content(self) -> dict[str, Any]:
         """Contenido comparado al reactivar después de un archivo."""
