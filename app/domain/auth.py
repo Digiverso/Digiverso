@@ -17,6 +17,8 @@ class AccountStatus(StrEnum):
 
 class Role(StrEnum):
     CONSUMIDOR = "consumidor"
+    PRODUCTOR = "productor"
+    ADMINISTRADOR = "administrador"
 
 
 class RegisterRequest(BaseModel):
@@ -399,3 +401,24 @@ class RateLimitExceededError(DomainError):
 class EmailDeliveryError(DomainError):
     status_code = 502
     codigo = "envio_correo_fallido"
+
+
+# ---------------------------------------------------------------- HU-04 (SUB-05)
+class InvalidRoleError(DomainError):
+    status_code = 400
+    codigo = "rol_no_permitido"
+
+
+class PermissionDeniedError(DomainError):
+    status_code = 403
+    codigo = "permiso_denegado"
+
+
+class AccountNotFoundError(DomainError):
+    status_code = 404
+    codigo = "usuario_no_encontrado"
+
+
+class LastAdministratorError(DomainError):
+    status_code = 409
+    codigo = "ultimo_administrador"

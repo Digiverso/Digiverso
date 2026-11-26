@@ -46,6 +46,7 @@ from app.domain.auth import (
     WeakPasswordError,
     normalizar_correo,
 )
+from app.domain.roles import permisos_para
 from app.repository.auth_repository import AuthRepository
 from app.repository.email_repository import EmailGateway
 
@@ -450,6 +451,7 @@ class AuthService:
             jti=jti,
             emitido_en=ahora,
             expira_en=expira_access,
+            scopes=permisos_para(cuenta.rol),
         )
         refresh_token = self.session_token_manager.generate_refresh_token()
         refresh_hash = self.session_token_manager.hash_refresh_token(refresh_token)

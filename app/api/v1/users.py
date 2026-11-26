@@ -7,12 +7,19 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import ValidationError
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
-from app.api.dependencies import get_client_ip, get_current_account, get_profile_service
+from app.api.dependencies import (
+    get_client_ip,
+    get_current_account,
+    get_profile_service,
+    get_roles_permissions_service,
+)
+from app.api.schemas import UserPermissionsData
 from app.core.config import Settings
 from app.core.responses import ApiResponse, ok
 from app.domain.auth import Account, UpdatePerfilRequest, UserProfile
 from app.domain.profile import InvalidProfileError, validar_tamano
 from app.services.profile_service import ProfileService
+from app.services.roles_permissions import RolesPermissionsService
 
 router = APIRouter(prefix="/api/v1/users", tags=["Usuarios"])
 
@@ -158,6 +165,35 @@ def editar_perfil(
     return ok(
         "Perfil actualizado correctamente.",
         service.actualizar(cuenta=cuenta, cambios=cambios, ip=ip),
+    )
+
+
+@router.get(
+    "/me/permissions",
+    response_model=ApiResponse[UserPermissionsData],
+    status_code=status.HTTP_200_OK,
+    summary="Consultar permisos efectivos (FUN-10 / PRC-10)",
+    description=(
+        "Devuelve el rol vigente en el repositorio, los permisos efectivos y los "
+        "recursos asociados. Los scopes del token son informativos."
+    ),
+    responses={
+        401: {"description": "Token de acceso ausente, inválido, expirado o sin sesión activa"},
+    },
+)
+def consultar_permisos(
+    cuenta: Account = Depends(get_current_account),
+    service: RolesPermissionsService = Depends(get_roles_permissions_service),
+) -> ApiResponse[UserPermissionsData]:
+    permisos = service.permisos_de(cuenta)
+    return ok(
+        "Permisos consultados correctamente.",
+        UserPermissionsData(
+            usuario_id=permisos.usuario_id,
+            rol=permisos.rol,
+            permisos=list(permisos.permisos),
+            recursos=list(permisos.recursos),
+        ),
     )
 
 

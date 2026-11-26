@@ -13,6 +13,7 @@ from app.api.auth_router import router as auth_router
 from app.api.dependencies import build_auth_service
 from app.api.errors import register_exception_handlers
 from app.api.v1.admin_auth_parameters import router as admin_auth_parameters_router
+from app.api.v1.admin_users import router as admin_users_router
 from app.api.v1.categories import router as categories_router
 from app.api.v1.products import router as products_router
 from app.api.v1.users import router as users_router
@@ -38,6 +39,7 @@ API REST de Digiverso con arquitectura de capas.
 ## Módulos
 
 - **Autenticación**: registro, verificación de correo, sesión y perfil de usuario.
+- **Roles y permisos**: asignación de roles (AUT-09) y consulta/validación de permisos.
 - **Administración**: consulta y actualización versionada de los parámetros de autenticación.
 - **Catálogo**: gestión del árbol de categorías y ciclo de vida de productos.
 - **Root**: estado del servicio.
@@ -108,8 +110,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 ),
             },
             {
+                "name": "Administración · Usuarios y roles",
+                "description": (
+                    "Asignación de roles permitidos por AUT-09 con auditoría y "
+                    "protección del último administrador."
+                ),
+            },
+            {
                 "name": "Usuarios",
-                "description": "Consulta y edición del perfil del usuario autenticado.",
+                "description": (
+                    "Consulta y edición del perfil, y consulta de permisos efectivos."
+                ),
             },
             {
                 "name": "Catálogo · Categorías",
@@ -156,7 +167,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> JSONResponse:
         errores = exc.errors()
         if request.url.path.startswith(
-            ("/api/v1/auth", "/api/v1/admin/auth/", "/api/v1/users")
+            (
+                "/api/v1/auth",
+                "/api/v1/admin/auth/",
+                "/api/v1/admin/users",
+                "/api/v1/users",
+            )
         ):
             # Formato acordado en HU-01 y reutilizado por HU-03/HU-06: 400 con campo/mensaje.
             detalle = [
@@ -191,6 +207,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     application.include_router(auth_router)
     application.include_router(admin_auth_parameters_router)
+    application.include_router(admin_users_router)
     application.include_router(users_router)
     application.include_router(categories_router)
     application.include_router(products_router)

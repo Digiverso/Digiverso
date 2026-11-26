@@ -1,12 +1,13 @@
-"""Esquemas Pydantic del catálogo (categorías y productos) y de HU-06."""
+"""Esquemas Pydantic del catálogo, HU-06 y roles/permisos (HU-04)."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
+from app.domain.auth import Role
 from app.domain.auth_parameters import AUTH_MODULO, AuthParameterVersion
 from app.domain.category import Category
 from app.domain.product import Product
@@ -287,3 +288,33 @@ class AuthParametersUpdateRequest(BaseModel):
     modulo: str = AUTH_MODULO
     parametros: dict[str, Any]
     motivo: str | None = None
+
+
+# ------------------------------------------------------------ HU-04 (SUB-05)
+class RoleAssignmentRequest(BaseModel):
+    """Cuerpo de PRC-09; ``rol`` se valida en el servicio contra AUT-09."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    rol: str = Field(
+        ...,
+        validation_alias=AliasChoices("rol", "role"),
+        description="Rol permitido por AUT-09: consumidor, productor o administrador.",
+    )
+
+
+class RoleAssignmentData(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    usuario_id: str = Field(alias="usuarioId")
+    rol_anterior: Role = Field(alias="rolAnterior")
+    rol_nuevo: Role = Field(alias="rolNuevo")
+
+
+class UserPermissionsData(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    usuario_id: str = Field(alias="usuarioId")
+    rol: Role
+    permisos: list[str]
+    recursos: list[str]
