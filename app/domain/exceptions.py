@@ -1,0 +1,101 @@
+"""Errores de dominio del catálogo y su traducción a HTTP."""
+
+from __future__ import annotations
+
+from typing import Any
+
+
+class CatalogError(Exception):
+    """Base de los errores de negocio del catálogo."""
+
+    status_code: int = 400
+    code: str = "CATALOG_ERROR"
+
+    def __init__(self, message: str, *, details: dict[str, Any] | None = None) -> None:
+        super().__init__(message)
+        self.message = message
+        self.details = details or {}
+
+
+class ForbiddenError(CatalogError):
+    status_code = 403
+    code = "CATALOG_FORBIDDEN"
+
+
+class InvalidCategoryError(CatalogError):
+    status_code = 422
+    code = "CATEGORY_INVALID"
+
+
+class CategoryNotFoundError(CatalogError):
+    status_code = 404
+    code = "CATEGORY_NOT_FOUND"
+
+
+class DuplicateCategoryNameError(CatalogError):
+    status_code = 409
+    code = "CATEGORY_DUPLICATE"
+
+
+class InvalidParentError(CatalogError):
+    status_code = 400
+    code = "CATEGORY_INVALID_PARENT"
+
+
+class CategoryCycleError(CatalogError):
+    status_code = 400
+    code = "CATEGORY_CYCLE"
+
+
+class CategoryHasActiveProductsError(CatalogError):
+    status_code = 409
+    code = "CATEGORY_ACTIVE_PRODUCTS"
+
+
+# ------------------------------------------------------------------ HU-08
+class InvalidProductError(CatalogError):
+    status_code = 422
+    code = "PRODUCT_INVALID"
+
+
+class InsufficientProductMediaError(InvalidProductError):
+    code = "PRODUCT_MEDIA_REQUIRED"
+
+
+class ProductNotFoundError(CatalogError):
+    status_code = 404
+    code = "PRODUCT_NOT_FOUND"
+
+
+class InvalidProductStateError(CatalogError):
+    status_code = 409
+    code = "PRODUCT_INVALID_STATE"
+
+
+# ------------------------------------------------------------------ HU-06
+class InvalidAuthParameterError(CatalogError):
+    """Parámetro de autenticación inválido (rango, tipo o dependencia)."""
+
+    status_code = 400
+    code = "AUTH_PARAMETER_INVALID"
+
+
+# Alias descriptivo para la familia de errores de parametrización.
+AuthParameterError = InvalidAuthParameterError
+
+
+class AuthParameterModuleError(AuthParameterError):
+    code = "AUTH_PARAMETER_MODULE"
+
+
+class AuthParameterNotFoundError(AuthParameterError):
+    code = "AUTH_PARAMETER_NOT_FOUND"
+
+
+class AuthParametersForbiddenError(ForbiddenError):
+    code = "AUTH_PARAMETERS_FORBIDDEN"
+
+
+class AuthParameterVersionNotFoundError(CatalogError):
+    status_code = 404
+    code = "AUTH_PARAMETER_VERSION_NOT_FOUND"
