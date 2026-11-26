@@ -18,6 +18,8 @@ from app.api.v1.categories import router as categories_router
 from app.api.v1.media import router as media_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.products import router as products_router
+from app.api.v1.reports import control_router as publication_control_reports_router
+from app.api.v1.reports import reports_router
 from app.api.v1.showcase import router as showcase_router
 from app.api.v1.users import router as users_router
 from app.cache.auth_parameters import InMemoryAuthParametersCache
@@ -31,13 +33,19 @@ from app.repository.auth_parameters import SQLiteAuthParameterRepository
 from app.repository.categories import SQLiteCategoryRepository
 from app.repository.auth_repository import auth_repository
 from app.repository.database import Database
+from app.repository.email_repository import build_notification_sender
+from app.repository.events import InMemoryEventBus
+from app.repository.notifications import notification_repository
 from app.repository.photo_storage import build_photo_storage
 from app.repository.products import SQLiteProductRepository
+from app.repository.reports import ReportRepository
 from app.services.auth_parameters import AuthParametersService
 from app.services.categories import CategoryService
 from app.services.media import MediaService
+from app.services.notifications import NotificationService
 from app.services.products import ProductService
 from app.services.profile_service import ProfileService
+from app.services.reports import ReportService
 
 DESCRIPTION = """
 API REST de Digiverso con arquitectura de capas.
@@ -48,7 +56,7 @@ API REST de Digiverso con arquitectura de capas.
 - **Roles y permisos**: asignación de roles (AUT-09) y consulta/validación de permisos.
 - **Notificaciones**: preferencias, bandeja, lectura y cola de entrega (AUT-10/AUT-11).
 - **Administración**: consulta y actualización versionada de los parámetros de autenticación.
-- **Catálogo**: árbol de categorías, ciclo de vida de productos, medios del producto y búsqueda/vitrina.
+- **Catálogo**: árbol de categorías, ciclo de vida de productos, medios del producto, búsqueda/vitrina y reportes/sanciones (HU-12).
 - **Root**: estado del servicio.
 
 Todas las respuestas usan el sobre `message`, `data` y `success`.
@@ -110,6 +118,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             settings=settings,
             showcase_cache=application.state.product_service.showcase_cache,
         )
+        # HU-12: reportes, gestión y sanciones comparten el bus de eventos con
+        # el control de publicaciones cuando este también está instalado.
+        event_bus = getattr(application.state, "event_bus", None)
+        if event_bus is None:
+            event_bus = InMemoryEventBus()
+            application.state.event_bus = event_bus
+        report_notifier = NotificationService(
+            repo=notification_repository,
+            settings=settings,
+            clock=auth_service.clock,
+            sender=build_notification_sender(settings),
+        )
+        application.state.report_service = ReportService(
+            repository=ReportRepository(database),
+            audit_repository=audit_repository,
+            settings=settings,
+            event_bus=event_bus,
+            product_repository=product_repository,
+            notifier=report_notifier,
+            clock=auth_service.clock,
+            showcase_cache=application.state.product_service.showcase_cache,
+        )
+        application.state.sanction_service = application.state.report_service
         yield
 
     application = FastAPI(
@@ -165,6 +196,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             {
                 "name": "Catálogo · Búsqueda y vitrina",
                 "description": "Búsqueda, filtros, vitrina por categoría y detalle público.",
+            },
+            {
+                "name": "Catálogo · Reportes",
+                "description": (
+                    "Reportes de contenido (CAT-14) y sanciones (CAT-15/CAT-16) "
+                    "con evidencia, auditoría y notificación a las partes."
+                ),
+            },
+            {
+                "name": "Catálogo · Control de publicaciones",
+                "description": "Cola de reportes, resolución y aplicación de sanciones.",
             },
             {
                 "name": "Root",
@@ -254,6 +296,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(products_router)
     application.include_router(media_router)
     application.include_router(showcase_router)
+    application.include_router(reports_router)
+    application.include_router(publication_control_reports_router)
 
     @application.get(
         "/",

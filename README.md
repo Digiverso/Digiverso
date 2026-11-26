@@ -5,7 +5,8 @@ API del marketplace Digiverso. Incluye los módulos **Autenticación**
 y parametrización HU-06/FUN-16), **Catálogo · Categorías**
 (HU-07, FUN-17 a FUN-20), **Catálogo · Productos** (HU-08, FUN-21 a FUN-25),
 **Catálogo · Medios del producto** (HU-09, FUN-26 y FUN-27) y
-**Catálogo · Búsqueda, vitrina y detalle** (HU-10, FUN-28 a FUN-31).
+**Catálogo · Búsqueda, vitrina y detalle** (HU-10, FUN-28 a FUN-31) y
+**Catálogo · Reportes y sanciones** (HU-12, FUN-35 a FUN-37).
 
 ## Instalación y ejecución
 
@@ -116,5 +117,21 @@ Documentación funcional:
 
 Documentación funcional:
 [`docs/HU-10_busqueda_filtros_vitrina_y_detalle.md`](docs/HU-10_busqueda_filtros_vitrina_y_detalle.md).
+
+## Endpoints de reportes y sanciones
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `POST` | `/api/v1/catalog/reports` | Reportar producto, reseña o usuario con motivo CAT-14 y evidencia (201/400/409) |
+| `GET` | `/api/v1/catalog/publication-control/reports` | Cola de reportes con filtros (200/403) |
+| `GET` | `/api/v1/catalog/publication-control/reports/{id}` | Detalle del reporte (200/403/404) |
+| `PATCH` | `/api/v1/catalog/publication-control/reports/{id}` | Desestimar o sancionar (200/400/403/404/409) |
+| `POST` | `/api/v1/catalog/publication-control/sanctions` | Aplicar sanción CAT-15 con días CAT-16 (201/400/403) |
+| `GET` | `/api/v1/catalog/publication-control/sanctions` | Historial de sanciones (200/403) |
+
+La evidencia se almacena con acceso restringido y la identidad del reportante no
+se expone en las respuestas. Las decisiones se auditan y notifican a las partes.
+Documentación funcional:
+[`docs/HU-12_reportes_y_sanciones.md`](docs/HU-12_reportes_y_sanciones.md).
 
 Todas las respuestas usan el sobre `{ "message", "data", "success" }`.

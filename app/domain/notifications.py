@@ -36,6 +36,10 @@ class NotificationType(StrEnum):
     CUENTA_BLOQUEADA = "cuenta_bloqueada"
     ROL_ASIGNADO = "rol_asignado"
     LOGIN_SOSPECHOSO = "login_sospechoso"
+    # HU-12: reportes y sanciones se comunican con lenguaje claro y motivo.
+    REPORTE_RECIBIDO = "reporte_recibido"
+    REPORTE_RESUELTO = "reporte_resuelto"
+    SANCION_APLICADA = "sancion_aplicada"
 
 
 CANALES_PERMITIDOS: tuple[NotificationChannel, ...] = tuple(NotificationChannel)
@@ -71,6 +75,9 @@ MENSAJES_BASE: dict[NotificationType, str] = {
     NotificationType.CUENTA_BLOQUEADA: "Tu cuenta fue bloqueada temporalmente.",
     NotificationType.ROL_ASIGNADO: "Se actualizó el rol de tu cuenta.",
     NotificationType.LOGIN_SOSPECHOSO: "Detectamos un acceso inusual a tu cuenta.",
+    NotificationType.REPORTE_RECIBIDO: "Recibimos tu reporte y lo enviamos a revisión.",
+    NotificationType.REPORTE_RESUELTO: "Tu reporte fue resuelto.",
+    NotificationType.SANCION_APLICADA: "Se aplicó una sanción a tu cuenta o contenido.",
 }
 
 
@@ -146,6 +153,10 @@ class NotificationTemplate:
             if clave in {"nombre", "detalle"}
         }
         mensaje = base.format(**seguro) if seguro else base
+        # Las decisiones (HU-11/HU-12) explican el motivo en el texto.
+        detalle = seguro.get("detalle", "").strip()
+        if detalle:
+            mensaje = f"{mensaje} {detalle}"
         if self.canal is NotificationChannel.EMAIL:
             nombre = seguro.get("nombre", "")
             prefijo = f"Hola {nombre}: " if nombre else ""
