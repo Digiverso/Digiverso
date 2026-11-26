@@ -13,9 +13,14 @@ from app.domain.actor import Actor
 from app.domain.auth import Account, AccountStatus, DomainError, InvalidCredentialsError
 from app.domain.auth_parameters import AuthParametersProvider
 from app.repository.auth_repository import auth_repository
-from app.repository.email_repository import build_email_gateway
+from app.repository.email_repository import (
+    build_email_gateway,
+    build_notification_sender,
+)
+from app.repository.notifications import notification_repository
 from app.repository.photo_storage import PhotoStorage, build_photo_storage
 from app.services.auth_service import AuthService
+from app.services.notifications import NotificationService
 from app.services.profile_service import ProfileService
 from app.services.roles_permissions import Principal, RolesPermissionsService
 
@@ -37,6 +42,11 @@ def build_auth_service(
     settings: Settings,
     parameters: AuthParametersProvider | None = None,
 ) -> AuthService:
+    notifications = NotificationService(
+        repo=notification_repository,
+        settings=settings,
+        sender=build_notification_sender(settings),
+    )
     return AuthService(
         repo=auth_repository,
         settings=settings,
@@ -54,6 +64,7 @@ def build_auth_service(
             window_seconds=settings.rate_limit_window_seconds,
         ),
         parameters=parameters,
+        notifier=notifications,
     )
 
 
@@ -140,6 +151,22 @@ def get_roles_permissions_service(request: Request) -> RolesPermissionsService:
         clock=auth_service.clock,
     )
     request.app.state.roles_permissions_service = service
+    return service
+
+
+def get_notifications_service(request: Request) -> NotificationService:
+    service = getattr(request.app.state, "notifications_service", None)
+    if isinstance(service, NotificationService):
+        return service
+
+    auth_service = _auth_service_para(request)
+    service = NotificationService(
+        repo=notification_repository,
+        settings=request.app.state.settings,
+        clock=auth_service.clock,
+        sender=build_notification_sender(request.app.state.settings),
+    )
+    request.app.state.notifications_service = service
     return service
 
 
