@@ -11,16 +11,20 @@ from starlette.responses import JSONResponse
 
 from app.api.auth_router import router as auth_router
 from app.api.errors import register_exception_handlers
+from app.api.v1.admin_auth_parameters import router as admin_auth_parameters_router
 from app.api.v1.categories import router as categories_router
 from app.api.v1.products import router as products_router
+from app.cache.auth_parameters import InMemoryAuthParametersCache
 from app.cache.category_tree import InMemoryCategoryTreeCache
 from app.core.config import Settings, get_settings, settings as default_settings
 from app.core.responses import ApiResponse, ok
 from app.domain.exceptions import CatalogError
 from app.repository.audit import SQLiteAuditRepository
+from app.repository.auth_parameters import SQLiteAuthParameterRepository
 from app.repository.categories import SQLiteCategoryRepository
 from app.repository.database import Database
 from app.repository.products import SQLiteProductRepository
+from app.services.auth_parameters import AuthParametersService
 from app.services.categories import CategoryService
 from app.services.products import ProductService
 
@@ -30,6 +34,7 @@ API REST de Digiverso con arquitectura de capas.
 ## Módulos
 
 - **Autenticación**: registro, verificación de correo e inicio de sesión.
+- **Administración**: consulta y actualización versionada de los parámetros de autenticación.
 - **Catálogo**: gestión del árbol de categorías y ciclo de vida de productos.
 - **Root**: estado del servicio.
 
@@ -47,6 +52,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         database = Database(settings.database_path)
         application.state.settings = settings
         application.state.database = database
+        application.state.auth_parameters_service = AuthParametersService(
+            repository=SQLiteAuthParameterRepository(database),
+            audit_repository=SQLiteAuditRepository(database),
+            cache=InMemoryAuthParametersCache(),
+            settings=settings,
+        )
         application.state.category_service = CategoryService(
             repository=SQLiteCategoryRepository(database),
             audit_repository=SQLiteAuditRepository(database),
@@ -71,6 +82,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             {
                 "name": "Autenticación",
                 "description": "Registro de visitantes, verificación de cuenta y acceso.",
+            },
+            {
+                "name": "Administración · Parámetros de autenticación",
+                "description": (
+                    "Consulta, validación, versionamiento e historial de los parámetros "
+                    "AUT-xx. Solo administradores con permiso explícito."
+                ),
             },
             {
                 "name": "Catálogo · Categorías",
@@ -116,8 +134,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
         errores = exc.errors()
-        if request.url.path.startswith("/api/v1/auth"):
-            # Formato acordado en HU-01: 400 con campo/mensaje.
+        if request.url.path.startswith(("/api/v1/auth", "/api/v1/admin/auth/")):
+            # Formato acordado en HU-01 y reutilizado por HU-06: 400 con campo/mensaje.
             detalle = [
                 {
                     "campo": ".".join(
@@ -149,6 +167,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     application.include_router(auth_router)
+    application.include_router(admin_auth_parameters_router)
     application.include_router(categories_router)
     application.include_router(products_router)
 
