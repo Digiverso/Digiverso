@@ -8,6 +8,7 @@ from fastapi import Header, Request
 from app.core.config import Settings, settings
 from app.core.rate_limit import RateLimiter
 from app.domain.auth import Account, AccountStatus, InvalidCredentialsError
+from app.domain.auth_parameters import AuthParametersProvider
 from app.repository.auth_repository import auth_repository
 from app.repository.email_repository import build_email_gateway
 from app.repository.photo_storage import PhotoStorage, build_photo_storage
@@ -28,7 +29,10 @@ password_recovery_rate_limiter = RateLimiter(
 )
 
 
-def build_auth_service(settings: Settings) -> AuthService:
+def build_auth_service(
+    settings: Settings,
+    parameters: AuthParametersProvider | None = None,
+) -> AuthService:
     return AuthService(
         repo=auth_repository,
         settings=settings,
@@ -45,6 +49,7 @@ def build_auth_service(settings: Settings) -> AuthService:
             limit=settings.password_recovery_rate_limit,
             window_seconds=settings.rate_limit_window_seconds,
         ),
+        parameters=parameters,
     )
 
 
@@ -57,7 +62,8 @@ def _auth_service_para(request: Request) -> AuthService:
     if isinstance(service, AuthService):
         return service
 
-    service = build_auth_service(request.app.state.settings)
+    parameters = getattr(request.app.state, "auth_parameters_service", None)
+    service = build_auth_service(request.app.state.settings, parameters=parameters)
     request.app.state.auth_service = service
     return service
 

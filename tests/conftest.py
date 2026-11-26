@@ -12,18 +12,21 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.dependencies import get_auth_service
+from app.cache.auth_parameters import InMemoryAuthParametersCache
 from app.cache.category_tree import InMemoryCategoryTreeCache
 from app.core.config import Settings, load_settings
 from app.core.rate_limit import RateLimiter
 from app.core.security import SessionTokenManager, VerificationTokenManager
 from app.main import create_app
 from app.repository.audit import SQLiteAuditRepository
+from app.repository.auth_parameters import SQLiteAuthParameterRepository
 from app.repository.auth_repository import auth_repository
 from app.repository.categories import SQLiteCategoryRepository
 from app.repository.database import Database
 from app.repository.email_repository import EmailDelivery
 from app.repository.photo_storage import build_photo_storage
 from app.repository.products import SQLiteProductRepository
+from app.services.auth_parameters import AuthParametersService
 from app.services.auth_service import AuthService
 from app.services.categories import CategoryService
 from app.services.products import ProductService
@@ -31,6 +34,7 @@ from app.services.profile_service import ProfileService
 
 CATEGORIES_URL = "/api/v1/catalog/categories"
 PRODUCTS_URL = "/api/v1/catalog/products"
+AUTH_PARAMETERS_URL = "/api/v1/admin/auth/parameters"
 PASSWORD = "Abcdef1!"
 
 
@@ -142,6 +146,18 @@ def service(clock: dict[str, datetime], email_gateway: FakeEmailGateway) -> Auth
     )
 
 
+# ---------------------------------------------------------------- HU-06
+@pytest.fixture()
+def auth_parameters_service(category_settings: Settings) -> AuthParametersService:
+    database = Database(category_settings.database_path)
+    return AuthParametersService(
+        repository=SQLiteAuthParameterRepository(database),
+        audit_repository=SQLiteAuditRepository(database),
+        cache=InMemoryAuthParametersCache(),
+        settings=category_settings,
+    )
+
+
 # ---------------------------------------------------------------- HU-07
 @pytest.fixture()
 def category_settings(tmp_path: Path) -> Settings:
@@ -237,6 +253,7 @@ def create_product(client: TestClient) -> Callable[..., Any]:
 @pytest.fixture()
 def client(
     service: AuthService,
+    auth_parameters_service: AuthParametersService,
     category_service: CategoryService,
     product_service: ProductService,
     category_settings: Settings,
@@ -247,6 +264,7 @@ def client(
     with TestClient(test_app) as test_client:
         # El factory crea su propio servicio; usamos el de la fixture para
         # poder inspeccionar repositorio, caché y auditoría desde las pruebas.
+        test_client.app.state.auth_parameters_service = auth_parameters_service
         test_client.app.state.auth_service = service
         test_client.app.state.category_service = category_service
         test_client.app.state.product_service = product_service
