@@ -71,6 +71,13 @@ class MediaService:
     def _now(self) -> datetime:
         return self.clock()
 
+    def _formatos_permitidos(self):
+        """Relee CAT-05/CAT-07: un cambio de parámetros aplica sin recrear el servicio."""
+
+        return formatos_permitidos(
+            self.settings.media_image_formats, self.settings.media_video_formats
+        )
+
     def _get(self, product_id: str) -> Product:
         product = self.repository.get(product_id)
         if product is None:
@@ -143,7 +150,7 @@ class MediaService:
         activos = medios_activos(product.medios)
         ensure_cantidad(len(activos), maximo=self.settings.media_max_per_product)
 
-        detectado = detectar_formato(archivo, formatos=self.formatos)
+        detectado = detectar_formato(archivo, formatos=self._formatos_permitidos())
         es_imagen = detectado.formato.tipo == "imagen"
         validate_tamano(
             archivo,
