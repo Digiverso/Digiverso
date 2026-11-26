@@ -155,6 +155,72 @@ class PasswordResetRequest(BaseModel):
     )
 
 
+class UpdatePerfilRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "example": {
+                "nombre": "Ana Torres",
+                "biografia": "Ilustradora digital.",
+                "foto": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==",
+            }
+        },
+    )
+
+    nombre: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=100,
+        description="Nombre visible del perfil",
+    )
+    biografia: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Biografía del perfil",
+    )
+    foto: str | bytes | None = Field(
+        default=None,
+        description="Imagen en data URL, URL de CDN o archivo multipart",
+    )
+
+
+class UserProfile(BaseModel):
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "id": "usr_001",
+                "nombre": "Ana Torres",
+                "correo": "ana@example.com",
+                "rol": "consumidor",
+                "biografia": "Ilustradora digital.",
+                "foto": "https://cdn.digiverso.com/users/usr_001/foto.png",
+                "fechaRegistro": "2026-01-01T12:00:00+00:00",
+            }
+        },
+    )
+
+    id: str
+    nombre: str
+    correo: str
+    rol: Role
+    biografia: str | None = None
+    foto: str | None = None
+    fechaRegistro: datetime
+
+    @classmethod
+    def from_account(cls, cuenta: Account) -> UserProfile:
+        return cls(
+            id=cuenta.id,
+            nombre=cuenta.nombre,
+            correo=cuenta.correo,
+            rol=cuenta.rol,
+            biografia=cuenta.biografia,
+            foto=cuenta.foto,
+            fechaRegistro=cuenta.creado_en,
+        )
+
+
 class ApiResponse(BaseModel, Generic[T]):
     model_config = ConfigDict(from_attributes=True)
 
@@ -179,6 +245,8 @@ class Account:
     verificado_en: datetime | None = None
     intentos_fallidos: int = 0
     bloqueado_hasta: datetime | None = None
+    biografia: str | None = None
+    foto: str | None = None
 
     def esta_pendiente(self) -> bool:
         return self.estado is AccountStatus.PENDIENTE

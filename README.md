@@ -1,8 +1,9 @@
 # Digiverso API
 
 API del marketplace Digiverso. Incluye los módulos **Autenticación**
-(HU-01, HU-02 y parametrización HU-06/FUN-16), **Catálogo · Categorías**
-(HU-07, FUN-17 a FUN-20) y **Catálogo · Productos** (HU-08, FUN-21 a FUN-25).
+(HU-01, HU-02, perfil HU-03/FUN-07 a FUN-08 y parametrización HU-06/FUN-16),
+**Catálogo · Categorías** (HU-07, FUN-17 a FUN-20) y **Catálogo · Productos**
+(HU-08, FUN-21 a FUN-25).
 
 ## Instalación y ejecución
 
@@ -20,6 +21,17 @@ Documentación interactiva (OpenAPI): <http://localhost:8000/docs>
 ```bash
 pytest -q
 ```
+
+## Endpoints de perfil
+
+Requieren `Authorization: Bearer <accessToken>` obtenido en `POST /api/v1/auth/login`.
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/api/v1/users/me` | Consultar el perfil propio (200) |
+| `PATCH` | `/api/v1/users/me` | Editar nombre, biografía o foto (200) |
+
+Documentación funcional: [`docs/HU-03_perfil_de_usuario.md`](docs/HU-03_perfil_de_usuario.md).
 
 ## Endpoints de parámetros de autenticación
 
