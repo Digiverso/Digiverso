@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS productos (
     activo             INTEGER NOT NULL DEFAULT 0 CHECK (activo IN (0, 1)),
     nombre             TEXT NOT NULL DEFAULT '',
     descripcion        TEXT NOT NULL DEFAULT '',
+    autor_nombre       TEXT NOT NULL DEFAULT '',
+    calificacion       REAL NOT NULL DEFAULT 0,
     precio             INTEGER NOT NULL DEFAULT 0,
     moneda             TEXT NOT NULL DEFAULT 'COP',
     edad_minima        INTEGER NOT NULL DEFAULT 0,
@@ -55,12 +57,15 @@ CREATE TABLE IF NOT EXISTS productos (
 );
 
 CREATE INDEX IF NOT EXISTS idx_productos_categoria ON productos(categoria_id);
+CREATE INDEX IF NOT EXISTS idx_productos_precio ON productos(precio);
+CREATE INDEX IF NOT EXISTS idx_productos_edades ON productos(edad_minima, edad_maxima);
 
--- Las licencias pertenecen a HU-15; HU-08 solo garantiza que archivar no las
--- altera. Se crea la tabla para poder comprobar esa invariante.
+-- Las licencias pertenecen a HU-15; HU-08 garantiza que archivar no las altera
+-- y HU-10 añade ``actor_id`` para resolver la licencia del visitante autenticado.
 CREATE TABLE IF NOT EXISTS licencias (
     id          TEXT PRIMARY KEY,
     producto_id TEXT NOT NULL REFERENCES productos(id) ON DELETE CASCADE,
+    actor_id    TEXT NOT NULL DEFAULT '',
     tipo        TEXT NOT NULL,
     vigente     INTEGER NOT NULL DEFAULT 1 CHECK (vigente IN (0, 1)),
     creado_en   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -105,6 +110,8 @@ CREATE INDEX IF NOT EXISTS idx_auth_parameter_versions_modulo
 _PRODUCT_MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("nombre", "TEXT NOT NULL DEFAULT ''"),
     ("descripcion", "TEXT NOT NULL DEFAULT ''"),
+    ("autor_nombre", "TEXT NOT NULL DEFAULT ''"),
+    ("calificacion", "REAL NOT NULL DEFAULT 0"),
     ("precio", "INTEGER NOT NULL DEFAULT 0"),
     ("moneda", "TEXT NOT NULL DEFAULT 'COP'"),
     ("edad_minima", "INTEGER NOT NULL DEFAULT 0"),
@@ -126,6 +133,9 @@ class Database:
 
     def __init__(self, path: Path) -> None:
         self.path = path
+        # FTS5 no viene habilitado en todas las compilaciones de SQLite; si no
+        # está disponible se usa un índice relacional simple con el mismo texto.
+        self.fts5_available = True
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connection() as connection:
             connection.executescript(SCHEMA)
@@ -137,6 +147,17 @@ class Database:
                     connection.execute(
                         f"ALTER TABLE productos ADD COLUMN {column} {definition}"
                     )
+            licencias_columns = {
+                row["name"] for row in connection.execute("PRAGMA table_info(licencias)")
+            }
+            if "actor_id" not in licencias_columns:
+                connection.execute(
+                    "ALTER TABLE licencias ADD COLUMN actor_id TEXT NOT NULL DEFAULT ''"
+                )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_licencias_actor "
+                "ON licencias(producto_id, actor_id, vigente)"
+            )
             # Estos índices dependen de columnas añadidas arriba, por lo que no
             # pueden formar parte del ``executescript`` inicial.
             connection.execute(
@@ -144,6 +165,26 @@ class Database:
             )
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_productos_autor ON productos(autor_id)"
+            )
+            self._init_search_index(connection)
+
+    def _init_search_index(self, connection: sqlite3.Connection) -> None:
+        existente = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE name = 'productos_busqueda'"
+        ).fetchone()
+        if existente is not None:
+            self.fts5_available = "virtual table" in existente["sql"].lower()
+            return
+        try:
+            connection.execute(
+                "CREATE VIRTUAL TABLE IF NOT EXISTS productos_busqueda USING fts5("
+                "id UNINDEXED, texto, tokenize='unicode61 remove_diacritics 2')"
+            )
+        except sqlite3.OperationalError:
+            self.fts5_available = False
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS productos_busqueda ("
+                "id TEXT PRIMARY KEY, texto TEXT NOT NULL)"
             )
 
     @contextmanager

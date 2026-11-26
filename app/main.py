@@ -15,22 +15,27 @@ from app.api.errors import register_exception_handlers
 from app.api.v1.admin_auth_parameters import router as admin_auth_parameters_router
 from app.api.v1.admin_users import router as admin_users_router
 from app.api.v1.categories import router as categories_router
+from app.api.v1.media import router as media_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.products import router as products_router
+from app.api.v1.showcase import router as showcase_router
 from app.api.v1.users import router as users_router
 from app.cache.auth_parameters import InMemoryAuthParametersCache
 from app.cache.category_tree import InMemoryCategoryTreeCache
+from app.cache.showcase import InMemoryShowcaseCache
 from app.core.config import Settings, get_settings, settings as default_settings
 from app.core.responses import ApiResponse, ok
 from app.domain.exceptions import CatalogError
 from app.repository.audit import SQLiteAuditRepository
 from app.repository.auth_parameters import SQLiteAuthParameterRepository
 from app.repository.categories import SQLiteCategoryRepository
+from app.repository.auth_repository import auth_repository
 from app.repository.database import Database
 from app.repository.photo_storage import build_photo_storage
 from app.repository.products import SQLiteProductRepository
 from app.services.auth_parameters import AuthParametersService
 from app.services.categories import CategoryService
+from app.services.media import MediaService
 from app.services.products import ProductService
 from app.services.profile_service import ProfileService
 
@@ -43,7 +48,7 @@ API REST de Digiverso con arquitectura de capas.
 - **Roles y permisos**: asignación de roles (AUT-09) y consulta/validación de permisos.
 - **Notificaciones**: preferencias, bandeja, lectura y cola de entrega (AUT-10/AUT-11).
 - **Administración**: consulta y actualización versionada de los parámetros de autenticación.
-- **Catálogo**: gestión del árbol de categorías y ciclo de vida de productos.
+- **Catálogo**: árbol de categorías, ciclo de vida de productos, medios del producto y búsqueda/vitrina.
 - **Root**: estado del servicio.
 
 Todas las respuestas usan el sobre `message`, `data` y `success`.
@@ -85,11 +90,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             cache=InMemoryCategoryTreeCache(),
             settings=settings,
         )
+        product_repository = SQLiteProductRepository(database)
+        audit_repository = SQLiteAuditRepository(database)
         application.state.product_service = ProductService(
-            repository=SQLiteProductRepository(database),
+            repository=product_repository,
             category_repository=SQLiteCategoryRepository(database),
-            audit_repository=SQLiteAuditRepository(database),
+            audit_repository=audit_repository,
             settings=settings,
+            showcase_cache=InMemoryShowcaseCache(),
+            author_name_provider=lambda user_id: (
+                account.nombre
+                if (account := auth_repository.obtener_cuenta_por_id(user_id))
+                else None
+            ),
+        )
+        application.state.media_service = MediaService(
+            repository=product_repository,
+            audit_repository=audit_repository,
+            settings=settings,
+            showcase_cache=application.state.product_service.showcase_cache,
         )
         yield
 
@@ -140,6 +159,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "description": "Creación, edición, revisión, archivo y reactivación.",
             },
             {
+                "name": "Catálogo · Medios del producto",
+                "description": "Carga y eliminación lógica de imágenes y videos.",
+            },
+            {
+                "name": "Catálogo · Búsqueda y vitrina",
+                "description": "Búsqueda, filtros, vitrina por categoría y detalle público.",
+            },
+            {
                 "name": "Root",
                 "description": "Información básica del servicio.",
             },
@@ -166,7 +193,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse(
             status_code=exc.status_code,
             content=jsonable_encoder(
-                {"message": exc.message, "data": exc.details, "success": False}
+                {
+                    "message": exc.message,
+                    "data": {"codigo": exc.code, **exc.details},
+                    "success": False,
+                }
             ),
         )
 
@@ -221,6 +252,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(notifications_router)
     application.include_router(categories_router)
     application.include_router(products_router)
+    application.include_router(media_router)
+    application.include_router(showcase_router)
 
     @application.get(
         "/",

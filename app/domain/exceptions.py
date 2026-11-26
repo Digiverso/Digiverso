@@ -72,6 +72,37 @@ class InvalidProductStateError(CatalogError):
     code = "PRODUCT_INVALID_STATE"
 
 
+# ------------------------------------------------------------------ HU-09
+class MediaFileRequiredError(CatalogError):
+    status_code = 400
+    code = "MEDIA_FILE_REQUIRED"
+
+
+class InvalidMediaFormatError(CatalogError):
+    status_code = 400
+    code = "MEDIA_FORMAT_INVALID"
+
+
+class MediaTooLargeError(CatalogError):
+    status_code = 413
+    code = "MEDIA_TOO_LARGE"
+
+
+class MediaLimitError(CatalogError):
+    status_code = 409
+    code = "MEDIA_LIMIT_REACHED"
+
+
+class MediaScanError(CatalogError):
+    status_code = 400
+    code = "MEDIA_SCAN_REJECTED"
+
+
+class MediaNotFoundError(CatalogError):
+    status_code = 404
+    code = "MEDIA_NOT_FOUND"
+
+
 # ------------------------------------------------------------------ HU-06
 class InvalidAuthParameterError(CatalogError):
     """Parámetro de autenticación inválido (rango, tipo o dependencia)."""
@@ -99,3 +130,9 @@ class AuthParametersForbiddenError(ForbiddenError):
 class AuthParameterVersionNotFoundError(CatalogError):
     status_code = 404
     code = "AUTH_PARAMETER_VERSION_NOT_FOUND"
+
+
+# ------------------------------------------------------------------ HU-10
+class InvalidCatalogQueryError(CatalogError):
+    status_code = 422
+    code = "CATALOG_QUERY_INVALID"

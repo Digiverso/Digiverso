@@ -1,9 +1,11 @@
 # Digiverso API
 
 API del marketplace Digiverso. Incluye los módulos **Autenticación**
-(HU-01, HU-02, perfil HU-03/FUN-07 a FUN-08 y parametrización HU-06/FUN-16),
-**Catálogo · Categorías** (HU-07, FUN-17 a FUN-20) y **Catálogo · Productos**
-(HU-08, FUN-21 a FUN-25).
+(HU-01, HU-02, perfil HU-03/FUN-07 a FUN-08, roles HU-04, notificaciones HU-05
+y parametrización HU-06/FUN-16), **Catálogo · Categorías**
+(HU-07, FUN-17 a FUN-20), **Catálogo · Productos** (HU-08, FUN-21 a FUN-25),
+**Catálogo · Medios del producto** (HU-09, FUN-26 y FUN-27) y
+**Catálogo · Búsqueda, vitrina y detalle** (HU-10, FUN-28 a FUN-31).
 
 ## Instalación y ejecución
 
@@ -87,12 +89,32 @@ Documentación funcional: [`docs/HU-07_gestion_de_categorias.md`](docs/HU-07_ges
 | `POST` | `/api/v1/catalog/products/{id}/submit-review` | Enviar a revisión (200) |
 | `PATCH` | `/api/v1/catalog/products/{id}/archive` | Archivar y retirar de la vitrina (200) |
 | `PATCH` | `/api/v1/catalog/products/{id}/reactivate` | Publicar o enviar a revisión (200) |
-| `GET` | `/api/v1/catalog/products` | Vitrina de productos publicados (200) |
-| `GET` | `/api/v1/catalog/products/{id}` | Detalle de un producto (200) |
+| `GET` | `/api/v1/catalog/products` | Búsqueda paginada de publicados con filtros (200) |
+| `GET` | `/api/v1/catalog/products/{id}` | Detalle público/licenciado (200) o 404 |
 
 El autor se obtiene del token (`Authorization: Bearer <token>`) o, mientras se
 integra la autenticación, de las cabeceras `X-Actor-Id` / `X-Actor-Roles`.
 Documentación funcional y ciclo de vida:
 [`docs/HU-08_producto_creacion_edicion_y_ciclo_de_vida.md`](docs/HU-08_producto_creacion_edicion_y_ciclo_de_vida.md).
+
+## Endpoints de medios del producto
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `POST` | `/api/v1/catalog/products/{id}/media` | Cargar imagen o video (201) |
+| `DELETE` | `/api/v1/catalog/products/{id}/media/{mediaId}` | Eliminar medio y reordenar (200) |
+
+Documentación funcional:
+[`docs/HU-09_medios_del_producto.md`](docs/HU-09_medios_del_producto.md).
+
+## Endpoints de búsqueda y vitrina
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/api/v1/catalog/products?q=&categoria=&edad=&precioMin=&precioMax=&orden=&pagina=&tamanioPagina=` | Buscar y filtrar solo productos publicados (200) |
+| `GET` | `/api/v1/catalog/showcase` | Vitrina agrupada por categoría, cacheada (200) |
+
+Documentación funcional:
+[`docs/HU-10_busqueda_filtros_vitrina_y_detalle.md`](docs/HU-10_busqueda_filtros_vitrina_y_detalle.md).
 
 Todas las respuestas usan el sobre `{ "message", "data", "success" }`.
