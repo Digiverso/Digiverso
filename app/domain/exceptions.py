@@ -136,3 +136,41 @@ class AuthParameterVersionNotFoundError(CatalogError):
 class InvalidCatalogQueryError(CatalogError):
     status_code = 422
     code = "CATALOG_QUERY_INVALID"
+
+
+# ------------------------------------------------------------------ HU-12
+class InvalidReportError(CatalogError):
+    """Motivo CAT-14, evidencia o decisión de reporte inválidos."""
+
+    status_code = 400
+    code = "REPORT_INVALID"
+
+
+class DuplicateReportError(CatalogError):
+    """Ya existe un reporte abierto del mismo usuario sobre el mismo contenido."""
+
+    status_code = 409
+    code = "REPORT_DUPLICATE"
+
+
+class ReportNotFoundError(CatalogError):
+    status_code = 404
+    code = "REPORT_NOT_FOUND"
+
+
+class ReportInvalidStateError(CatalogError):
+    status_code = 409
+    code = "REPORT_INVALID_STATE"
+
+
+class ReportForbiddenError(ForbiddenError):
+    """Solo un administrador puede gestionar reportes y sanciones."""
+
+    code = "REPORT_FORBIDDEN"
+
+
+class InvalidSanctionError(CatalogError):
+    """Tipo CAT-15 o duración CAT-16 inválidos."""
+
+    status_code = 400
+    code = "SANCTION_INVALID"

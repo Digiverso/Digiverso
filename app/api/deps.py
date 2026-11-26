@@ -8,10 +8,17 @@ from app.core.config import Settings
 from app.core.security import ActorTokenManager
 from app.domain.actor import ADMIN_ROLE, Actor
 from app.domain.exceptions import ForbiddenError
+from app.repository.audit import SQLiteAuditRepository
+from app.repository.email_repository import build_notification_sender
+from app.repository.events import InMemoryEventBus
+from app.repository.notifications import notification_repository
+from app.repository.reports import ReportRepository
 from app.services.auth_parameters import AuthParametersService
 from app.services.categories import CategoryService
 from app.services.media import MediaService
+from app.services.notifications import NotificationService
 from app.services.products import ProductService
+from app.services.reports import ReportService
 
 
 def get_auth_parameters_service(request: Request) -> AuthParametersService:
@@ -28,6 +35,43 @@ def get_product_service(request: Request) -> ProductService:
 
 def get_media_service(request: Request) -> MediaService:
     return request.app.state.media_service
+
+
+def get_report_service(request: Request) -> ReportService:
+    """Servicio de HU-12; se construye perezosamente si el factory no lo inyectó."""
+
+    service = getattr(request.app.state, "report_service", None)
+    if isinstance(service, ReportService):
+        return service
+
+    settings: Settings = request.app.state.settings
+    database = request.app.state.database
+    product_service = getattr(request.app.state, "product_service", None)
+    auth_service = getattr(request.app.state, "auth_service", None)
+    clock = getattr(auth_service, "clock", None)
+
+    event_bus = getattr(request.app.state, "event_bus", None)
+    if event_bus is None:
+        event_bus = InMemoryEventBus()
+        request.app.state.event_bus = event_bus
+
+    service = ReportService(
+        repository=ReportRepository(database),
+        audit_repository=SQLiteAuditRepository(database),
+        settings=settings,
+        event_bus=event_bus,
+        product_repository=getattr(product_service, "repository", None),
+        notifier=NotificationService(
+            repo=notification_repository,
+            settings=settings,
+            clock=clock,
+            sender=build_notification_sender(settings),
+        ),
+        clock=clock,
+        showcase_cache=getattr(product_service, "showcase_cache", None),
+    )
+    request.app.state.report_service = service
+    return service
 
 
 def get_actor(

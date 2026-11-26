@@ -498,3 +498,183 @@ class NotificationListData(BaseModel):
 class NotificationReadData(BaseModel):
     id: str
     leida: bool
+
+
+# ------------------------------------------------------------ HU-12 (SUB-13)
+class ReportCreateRequest(BaseModel):
+    """Cuerpo de PRC-35: motivo CAT-14 y evidencia obligatorios."""
+
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    contenido_id: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "contenidoId", "contenido_id", "contentId", "contenido"
+        ),
+    )
+    motivo: str = ""
+    evidencia: Any = None
+    tipo_contenido: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "tipoContenido", "tipo_contenido", "tipo", "contentType"
+        ),
+    )
+    descripcion: str | None = None
+
+
+class ReportResolveRequest(BaseModel):
+    """Cuerpo de PRC-36: decisión, sanción opcional y observación."""
+
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    decision: str | None = None
+    resolucion: dict[str, Any] | None = None
+    sancion: dict[str, Any] | None = None
+    observacion: str | None = None
+    estado: str | None = None
+    motivo: str | None = None
+    evidencia: Any = None
+
+
+class SanctionCreateRequest(BaseModel):
+    """Cuerpo de PRC-37: sanción CAT-15 con evidencia y usuario afectado."""
+
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    reporte_id: str | None = Field(
+        default=None, validation_alias=AliasChoices("reporteId", "reporte_id", "reportId")
+    )
+    contenido_id: str | None = Field(
+        default=None, validation_alias=AliasChoices("contenidoId", "contenido_id", "contentId")
+    )
+    tipo: str | None = Field(
+        default=None, validation_alias=AliasChoices("tipo", "tipoSancion", "tipo_sancion")
+    )
+    duracion_dias: Any = Field(
+        default=None, validation_alias=AliasChoices("duracionDias", "duracion_dias", "duracion")
+    )
+    usuario_afectado: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "usuarioAfectado", "usuario_afectado", "usuario", "affectedUser"
+        ),
+    )
+    motivo: str | None = None
+    evidencia: Any = None
+    observacion: str | None = None
+    accion_contenido: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("accionContenido", "accion_contenido", "accion"),
+    )
+
+
+class ResolucionData(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    decision: str
+    sancion: str | None = None
+    observacion: str
+    fecha: datetime | None = None
+
+    @classmethod
+    def from_resolucion(cls, resolucion) -> ResolucionData:
+        return cls(
+            decision=resolucion.decision,
+            sancion=resolucion.sancion_id,
+            observacion=resolucion.observacion,
+            fecha=resolucion.fecha,
+        )
+
+
+class ReportData(BaseModel):
+    """Reporte expuesto al reportero y al administrador (sin reportanteId)."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    contenido_id: str = Field(alias="contenidoId")
+    motivo: str
+    evidencia: Any
+    estado: str
+    fecha: datetime
+    tipo_contenido: str | None = Field(
+        default=None, alias="tipoContenido", exclude=True
+    )
+    resolucion: ResolucionData | None = None
+    decision: str | None = None
+    sancion: str | None = None
+    observacion: str | None = None
+
+    @classmethod
+    def from_report(cls, reporte) -> ReportData:
+        resolucion = (
+            ResolucionData.from_resolucion(reporte.resolucion)
+            if reporte.resolucion
+            else None
+        )
+        return cls(
+            id=reporte.id,
+            contenidoId=reporte.contenido_id,
+            motivo=reporte.motivo,
+            evidencia=reporte.evidencia,
+            estado=reporte.estado,
+            fecha=reporte.fecha,
+            tipoContenido=reporte.tipo_contenido,
+            resolucion=resolucion,
+            decision=resolucion.decision if resolucion else None,
+            sancion=resolucion.sancion if resolucion else None,
+            observacion=resolucion.observacion if resolucion else None,
+        )
+
+
+class ReportListData(BaseModel):
+    items: list[ReportData]
+    total: int
+    pagina: int
+    tamanio_pagina: int = Field(alias="tamanioPagina")
+
+
+class SanctionData(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    reporte_id: str | None = Field(default=None, alias="reporteId")
+    contenido_id: str = Field(alias="contenidoId")
+    tipo: str
+    duracion_dias: int = Field(alias="duracionDias")
+    usuario_afectado: str = Field(alias="usuarioAfectado")
+    fecha: datetime
+    politica: str = "CAT-15"
+    accion_contenido: str = Field(default="archivar", alias="accionContenido")
+    estado_contenido: str | None = Field(default=None, alias="estadoContenido")
+    apelable: bool = True
+    notificado: bool = False
+
+    @classmethod
+    def from_sanction(cls, sancion) -> SanctionData:
+        return cls(
+            id=sancion.id,
+            reporteId=sancion.reporte_id,
+            contenidoId=sancion.contenido_id,
+            tipo=sancion.tipo,
+            duracionDias=sancion.duracion_dias,
+            usuarioAfectado=sancion.usuario_afectado,
+            fecha=sancion.fecha,
+            accionContenido=sancion.accion_contenido,
+            estadoContenido=sancion.estado_contenido,
+            apelable=sancion.apelable,
+            notificado=sancion.notificado,
+        )
+
+
+class SanctionListData(BaseModel):
+    items: list[SanctionData]
+    total: int
+
+
+ReportData.model_rebuild()
+ResolucionData.model_rebuild()
+ReportListData.model_rebuild()
+SanctionData.model_rebuild()
+SanctionListData.model_rebuild()

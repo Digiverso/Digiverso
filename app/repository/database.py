@@ -86,6 +86,52 @@ CREATE TABLE IF NOT EXISTS audit_log (
 
 CREATE INDEX IF NOT EXISTS idx_audit_entidad ON audit_log(entidad_id);
 
+-- Reportes y sanciones (HU-12). La evidencia se guarda como JSON en una tabla
+-- de acceso interno; las respuestas solo exponen metadatos al reportero y al
+-- administrador. El índice parcial impide acumular reportes abiertos duplicados.
+CREATE TABLE IF NOT EXISTS reportes (
+    id              TEXT PRIMARY KEY,
+    contenido_id    TEXT NOT NULL,
+    tipo_contenido  TEXT NOT NULL DEFAULT 'producto',
+    motivo          TEXT NOT NULL,
+    evidencia       TEXT NOT NULL DEFAULT '[]',
+    evidencia_hash  TEXT NOT NULL DEFAULT '',
+    reportante_id   TEXT NOT NULL,
+    estado          TEXT NOT NULL DEFAULT 'abierto',
+    fecha           TEXT NOT NULL,
+    resolucion      TEXT,
+    fecha_resolucion TEXT,
+    metadatos       TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_reportes_abiertos
+    ON reportes(reportante_id, contenido_id)
+    WHERE estado IN ('abierto', 'en_revision');
+
+CREATE INDEX IF NOT EXISTS idx_reportes_estado ON reportes(estado, fecha DESC);
+CREATE INDEX IF NOT EXISTS idx_reportes_contenido ON reportes(contenido_id);
+
+CREATE TABLE IF NOT EXISTS sanciones (
+    id                TEXT PRIMARY KEY,
+    reporte_id        TEXT,
+    contenido_id      TEXT NOT NULL,
+    tipo              TEXT NOT NULL,
+    duracion_dias     INTEGER NOT NULL DEFAULT 0,
+    usuario_afectado  TEXT NOT NULL,
+    motivo            TEXT NOT NULL DEFAULT '',
+    observacion       TEXT NOT NULL DEFAULT '',
+    evidencia         TEXT NOT NULL DEFAULT '[]',
+    evidencia_hash    TEXT NOT NULL DEFAULT '',
+    accion_contenido  TEXT NOT NULL DEFAULT 'archivar',
+    apelable          INTEGER NOT NULL DEFAULT 1,
+    notificado        INTEGER NOT NULL DEFAULT 0,
+    estado_contenido  TEXT,
+    fecha             TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sanciones_reporte ON sanciones(reporte_id);
+CREATE INDEX IF NOT EXISTS idx_sanciones_usuario ON sanciones(usuario_afectado);
+
 -- Parámetros de autenticación (HU-06). Cada versión es inmutable: las
 -- actualizaciones insertan una fila nueva con los valores anteriores.
 CREATE TABLE IF NOT EXISTS auth_parameter_versions (

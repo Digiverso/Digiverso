@@ -159,6 +159,10 @@ class Settings:
     media_storage_dir: Path = Path("uploads/media")
     media_url_base: str = "https://cdn.digiverso.com/products"
 
+    # Catálogo · reportes y sanciones (HU-12). CAT-16 fija la duración por
+    # defecto de una suspensión temporal cuando el administrador no la indica.
+    report_suspension_days: int = 7  # CAT-16
+
     @property
     def media_max_read_bytes(self) -> int:
         """Tope de lectura del cuerpo: basta para detectar CAT-06/CAT-08."""
@@ -273,6 +277,7 @@ def load_settings() -> Settings:
         media_url_base=value(
             "MEDIA_URL_BASE", "https://cdn.digiverso.com/products"
         ).rstrip("/"),
+        report_suspension_days=int(value("CAT_16_SUSPENSION_DAYS", "7")),
     )
 
 
