@@ -113,6 +113,10 @@ class Settings:
     profile_photo_s3_region: str = "us-east-1"
     profile_photo_s3_endpoint: str = ""
 
+    # Notificaciones (HU-05). AUT-10 fija canales/tipos y AUT-11 la retención.
+    notification_retention_days: int = 30
+    notification_max_retries: int = 3
+
     # Catálogo (HU-07)
     database_path: Path = field(
         default_factory=lambda: sqlite_path(
@@ -217,6 +221,8 @@ def load_settings() -> Settings:
         profile_photo_bucket=value("PROFILE_PHOTO_BUCKET", ""),
         profile_photo_s3_region=value("PROFILE_PHOTO_S3_REGION", "us-east-1"),
         profile_photo_s3_endpoint=value("PROFILE_PHOTO_S3_ENDPOINT", ""),
+        notification_retention_days=int(value("AUT_11_RETENTION_DAYS", "30")),
+        notification_max_retries=int(value("NOTIFICATION_MAX_RETRIES", "3")),
         database_path=sqlite_path(value("DATABASE_URL", "sqlite:///./dev.db")),
         category_name_min_length=int(value("CAT_17_MIN_LENGTH", "2")),
         category_name_max_length=int(value("CAT_17_MAX_LENGTH", "80")),

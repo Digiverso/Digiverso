@@ -31,6 +31,9 @@ Requieren `Authorization: Bearer <accessToken>` obtenido en `POST /api/v1/auth/l
 | `GET` | `/api/v1/users/me` | Consultar el perfil propio (200) |
 | `PATCH` | `/api/v1/users/me` | Editar nombre, biografía o foto (200) |
 | `GET` | `/api/v1/users/me/permissions` | Consultar permisos efectivos (200) |
+| `PUT` | `/api/v1/users/me/notification-preferences` | Configurar canales y tipos (200/400) |
+| `GET` | `/api/v1/users/me/notifications` | Consultar bandeja paginada (200) |
+| `PATCH` | `/api/v1/users/me/notifications/{id}/read` | Marcar como leída (200/404) |
 
 Documentación funcional: [`docs/HU-03_perfil_de_usuario.md`](docs/HU-03_perfil_de_usuario.md).
 
@@ -43,6 +46,13 @@ Documentación funcional: [`docs/HU-03_perfil_de_usuario.md`](docs/HU-03_perfil_
 Acepta sesión RS256, token de actor o `X-Actor-Id` / `X-Actor-Roles`; requiere
 permiso `admin.users.roles.write`. Documentación funcional:
 [`docs/HU-04_roles_y_permisos.md`](docs/HU-04_roles_y_permisos.md).
+
+## Notificaciones y preferencias
+
+Los canales y tipos se validan contra AUT-10; la bandeja aplica retención AUT-11
+(30 días por defecto). Las notificaciones críticas de seguridad no se silencian.
+Documentación funcional:
+[`docs/HU-05_notificaciones_y_preferencias.md`](docs/HU-05_notificaciones_y_preferencias.md).
 
 ## Endpoints de parámetros de autenticación
 

@@ -15,6 +15,7 @@ from app.api.errors import register_exception_handlers
 from app.api.v1.admin_auth_parameters import router as admin_auth_parameters_router
 from app.api.v1.admin_users import router as admin_users_router
 from app.api.v1.categories import router as categories_router
+from app.api.v1.notifications import router as notifications_router
 from app.api.v1.products import router as products_router
 from app.api.v1.users import router as users_router
 from app.cache.auth_parameters import InMemoryAuthParametersCache
@@ -40,6 +41,7 @@ API REST de Digiverso con arquitectura de capas.
 
 - **Autenticación**: registro, verificación de correo, sesión y perfil de usuario.
 - **Roles y permisos**: asignación de roles (AUT-09) y consulta/validación de permisos.
+- **Notificaciones**: preferencias, bandeja, lectura y cola de entrega (AUT-10/AUT-11).
 - **Administración**: consulta y actualización versionada de los parámetros de autenticación.
 - **Catálogo**: gestión del árbol de categorías y ciclo de vida de productos.
 - **Root**: estado del servicio.
@@ -120,6 +122,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "name": "Usuarios",
                 "description": (
                     "Consulta y edición del perfil, y consulta de permisos efectivos."
+                ),
+            },
+            {
+                "name": "Usuarios · Notificaciones",
+                "description": (
+                    "Preferencias AUT-10, bandeja con retención AUT-11 y lectura "
+                    "de notificaciones propias."
                 ),
             },
             {
@@ -209,6 +218,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(admin_auth_parameters_router)
     application.include_router(admin_users_router)
     application.include_router(users_router)
+    application.include_router(notifications_router)
     application.include_router(categories_router)
     application.include_router(products_router)
 
