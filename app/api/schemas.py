@@ -1,14 +1,16 @@
-"""Esquemas Pydantic del catálogo (categorías y productos)."""
+"""Esquemas Pydantic del catálogo, HU-06 y roles/permisos (HU-04)."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
+from app.domain.auth import Role
+from app.domain.auth_parameters import AUTH_MODULO, AuthParameterVersion
 from app.domain.category import Category
-from app.domain.product import Product
+from app.domain.product import MEDIO_ELIMINADO, Medio, Product
 
 
 class CategoryNode(BaseModel):
@@ -114,6 +116,7 @@ class MedioResponse(BaseModel):
     tipo: str
     url: str
     orden: int = 0
+    estado: str = "activo"
 
 
 class LicenciaUsuarioResponse(BaseModel):
@@ -179,9 +182,14 @@ class ProductResponse(BaseModel):
             autor_id=product.autor_id if incluir_privados else None,
             medios=[
                 MedioResponse(
-                    id=medio.id, tipo=medio.tipo, url=medio.url, orden=medio.orden
+                    id=medio.id,
+                    tipo=medio.tipo,
+                    url=medio.url,
+                    orden=medio.orden,
+                    estado=medio.estado,
                 )
                 for medio in sorted(product.medios, key=lambda item: item.orden)
+                if medio.visible
             ],
             creado_en=product.creado_en,
             actualizado_en=product.actualizado_en,
@@ -218,6 +226,140 @@ class ProductTransition(ProductResponse):
 
 ProductResponse.model_rebuild()
 ProductTransition.model_rebuild()
+
+
+# ------------------------------------------------------------ HU-09 (SUB-10)
+class MediaUploadResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    producto_id: str = Field(alias="productoId")
+    tipo: str
+    url: str
+    orden: int
+    estado: str
+
+    @classmethod
+    def from_medio(cls, producto_id: str, medio: Medio) -> MediaUploadResponse:
+        return cls(
+            id=medio.id,
+            producto_id=producto_id,
+            tipo=medio.tipo,
+            url=medio.url,
+            orden=medio.orden,
+            estado=medio.estado,
+        )
+
+
+class MediaDeleteResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    producto_id: str = Field(alias="productoId")
+    estado: str = MEDIO_ELIMINADO
+    total_medios: int = Field(alias="totalMedios")
+    medios: list[MedioResponse]
+
+
+MediaUploadResponse.model_rebuild()
+MediaDeleteResponse.model_rebuild()
+
+
+# ------------------------------------------------------------ HU-06 (SUB-07)
+class AuthParameterValidationSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    tipo: str
+    minimo: int | None = None
+    maximo: int | None = None
+    requerido: bool = True
+
+
+class AuthParameterDetail(BaseModel):
+    """Metadato completo de un parámetro: código, valor, tipo y validación."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    codigo: str
+    nombre: str
+    descripcion: str
+    modulo: str
+    valor: int
+    tipo: str
+    validacion: AuthParameterValidationSchema
+    dependencias: list[str] = Field(default_factory=list)
+
+
+class AuthParametersData(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    version: int
+    vigente_desde: datetime = Field(alias="vigenteDesde")
+    modulo: str
+    parametros: dict[str, int]
+    definiciones: list[AuthParameterDetail]
+    actualizado_por: str | None = Field(default=None, alias="actualizadoPor")
+    motivo: str = ""
+
+    @classmethod
+    def from_version(
+        cls, version: AuthParameterVersion, definiciones: list[AuthParameterDetail]
+    ) -> AuthParametersData:
+        return cls(
+            version=version.version,
+            vigente_desde=version.vigente_desde,
+            modulo=version.modulo,
+            parametros=dict(version.valores),
+            definiciones=definiciones,
+            actualizado_por=version.actor_id or None,
+            motivo=version.motivo,
+        )
+
+
+class AuthParameterVersionItem(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    version: int
+    vigente_desde: datetime = Field(alias="vigenteDesde")
+    modulo: str
+    parametros: dict[str, int]
+    anteriores: dict[str, int]
+    actor_id: str = Field(alias="actorId")
+    actor_roles: list[str] = Field(alias="actorRoles")
+    motivo: str = ""
+    actual: bool = False
+
+    @classmethod
+    def from_version(
+        cls, version: AuthParameterVersion, *, actual: bool = False
+    ) -> AuthParameterVersionItem:
+        return cls(
+            version=version.version,
+            vigente_desde=version.vigente_desde,
+            modulo=version.modulo,
+            parametros=dict(version.valores),
+            anteriores=dict(version.anteriores),
+            actor_id=version.actor_id,
+            actor_roles=list(version.actor_roles),
+            motivo=version.motivo,
+            actual=actual,
+        )
+
+
+class AuthParametersHistoryData(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    version_actual: int = Field(alias="versionActual")
+    total: int
+    versiones: list[AuthParameterVersionItem]
+
+
+class AuthParametersUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    modulo: str = AUTH_MODULO
+    parametros: dict[str, Any]
+    motivo: str | None = None
 
 
 # ------------------------------------------------------------ HU-10 (SUB-11/12)
@@ -278,3 +420,81 @@ class ShowcaseCategory(BaseModel):
 class ShowcaseData(BaseModel):
     categorias: list[ShowcaseCategory]
     total: int
+
+
+# ------------------------------------------------------------ HU-04 (SUB-05)
+class RoleAssignmentRequest(BaseModel):
+    """Cuerpo de PRC-09; ``rol`` se valida en el servicio contra AUT-09."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    rol: str = Field(
+        ...,
+        validation_alias=AliasChoices("rol", "role"),
+        description="Rol permitido por AUT-09: consumidor, productor o administrador.",
+    )
+
+
+class RoleAssignmentData(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    usuario_id: str = Field(alias="usuarioId")
+    rol_anterior: Role = Field(alias="rolAnterior")
+    rol_nuevo: Role = Field(alias="rolNuevo")
+
+
+class UserPermissionsData(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    usuario_id: str = Field(alias="usuarioId")
+    rol: Role
+    permisos: list[str]
+    recursos: list[str]
+
+
+# ------------------------------------------------------------ HU-05 (SUB-06)
+class NotificationPreferencesRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    canales: list[str]
+    tipos: list[str]
+
+
+class NotificationPreferencesData(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    canales: list[str]
+    tipos: list[str]
+
+
+class NotificationItem(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    tipo: str
+    mensaje: str
+    canal: str
+    leida: bool
+    fecha: datetime
+
+    @classmethod
+    def from_notification(cls, notification) -> NotificationItem:
+        return cls(
+            id=notification.id,
+            tipo=notification.tipo.value,
+            mensaje=notification.mensaje,
+            canal=notification.canal.value,
+            leida=notification.leida,
+            fecha=notification.creado_en,
+        )
+
+
+class NotificationListData(BaseModel):
+    items: list[NotificationItem]
+    pagina: int
+    total: int
+
+
+class NotificationReadData(BaseModel):
+    id: str
+    leida: bool

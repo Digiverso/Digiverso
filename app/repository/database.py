@@ -85,6 +85,22 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_entidad ON audit_log(entidad_id);
+
+-- Parámetros de autenticación (HU-06). Cada versión es inmutable: las
+-- actualizaciones insertan una fila nueva con los valores anteriores.
+CREATE TABLE IF NOT EXISTS auth_parameter_versions (
+    version        INTEGER PRIMARY KEY,
+    vigente_desde  TEXT NOT NULL,
+    modulo         TEXT NOT NULL,
+    actor_id       TEXT NOT NULL,
+    actor_roles    TEXT NOT NULL,
+    motivo         TEXT NOT NULL DEFAULT '',
+    anteriores     TEXT NOT NULL DEFAULT '{}',
+    valores        TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_auth_parameter_versions_modulo
+    ON auth_parameter_versions(modulo, version DESC);
 """
 
 

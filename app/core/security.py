@@ -99,10 +99,12 @@ class SessionTokenManager:
         jti: str,
         emitido_en: datetime,
         expira_en: datetime,
+        scopes: tuple[str, ...] = (),
     ) -> str:
         payload = {
             "sub": cuenta_id,
             "rol": rol,
+            "scopes": list(scopes),
             "jti": jti,
             "iss": self.settings.jwt_issuer,
             "aud": self.settings.jwt_audience,

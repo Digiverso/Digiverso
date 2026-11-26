@@ -7,6 +7,17 @@ from typing import Callable
 from app.core.config import Settings
 from app.core.rate_limit import RateLimiter
 from app.core.security import PasswordHasher, SessionTokenManager, VerificationTokenManager
+from app.domain.auth_parameters import (
+    BLOQUEO_CUENTA,
+    INTENTOS_FALLIDOS,
+    LONGITUD_CONTRASENA,
+    SETTING_FIELD_BY_CODE,
+    TTL_ACCESO,
+    TTL_RECUPERACION,
+    TTL_REFRESCO,
+    TTL_VERIFICACION,
+    AuthParametersProvider,
+)
 from app.domain.auth import (
     Account,
     AccountLockedError,
@@ -35,8 +46,10 @@ from app.domain.auth import (
     WeakPasswordError,
     normalizar_correo,
 )
+from app.domain.roles import permisos_para
 from app.repository.auth_repository import AuthRepository
 from app.repository.email_repository import EmailGateway
+from app.services.notifications import NotificationPublisher
 
 
 class AuthService:
@@ -52,6 +65,8 @@ class AuthService:
         token_manager: VerificationTokenManager | None = None,
         session_token_manager: SessionTokenManager | None = None,
         clock: Callable[[], datetime] | None = None,
+        parameters: AuthParametersProvider | None = None,
+        notifier: NotificationPublisher | None = None,
     ) -> None:
         self.repo = repo
         self.settings = settings
@@ -63,6 +78,39 @@ class AuthService:
         self.token_manager = token_manager or VerificationTokenManager(settings.secret_key)
         self.session_token_manager = session_token_manager or SessionTokenManager(settings)
         self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self.parameters = parameters
+        self.notifier = notifier
+
+    def _notificar_evento(
+        self,
+        cuenta: Account,
+        tipo: str,
+        *,
+        clave_idempotencia: str,
+        contexto: dict[str, str] | None = None,
+    ) -> None:
+        """Publica un evento de cuenta; un fallo de notificación no rompe la HU."""
+
+        if self.notifier is None:
+            return
+        try:
+            self.notifier.notificar_evento(
+                cuenta_id=cuenta.id,
+                tipo=tipo,
+                contexto=contexto or {},
+                clave_idempotencia=clave_idempotencia,
+                nombre=cuenta.nombre,
+                correo=cuenta.correo,
+            )
+        except Exception:
+            pass
+
+    def _parametro(self, codigo: str) -> int:
+        """Lee el valor vigente (HU-06) o el estático de ``Settings``."""
+
+        if self.parameters is not None:
+            return self.parameters.value(codigo)
+        return int(getattr(self.settings, SETTING_FIELD_BY_CODE[codigo]))
 
     def registrar(self, datos: RegisterRequest, ip: str) -> ApiResponse[RegisterResponseData]:
         correo = normalizar_correo(str(datos.correo))
@@ -89,7 +137,7 @@ class AuthService:
 
         token = self.token_manager.generate()
         token_hash = self.token_manager.hash_token(token)
-        expira_en = ahora + timedelta(minutes=self.settings.verification_token_ttl_minutes)
+        expira_en = ahora + timedelta(minutes=self._parametro(TTL_VERIFICACION))
         self.repo.crear_token_verificacion(cuenta.id, token_hash, ahora, expira_en)
 
         verification_url = f"{self.settings.verification_url_base.rstrip('/')}?token={token}"
@@ -158,6 +206,12 @@ class AuthService:
             {"resultado": AccountStatus.ACTIVA.value},
             ahora,
         )
+        self._notificar_evento(
+            cuenta,
+            "cuenta_verificada",
+            clave_idempotencia=f"verificacion:{cuenta.id}",
+            contexto={"nombre": cuenta.nombre},
+        )
 
         return ApiResponse[VerifyResponseData](
             message="Cuenta verificada correctamente.",
@@ -206,8 +260,8 @@ class AuthService:
             if cuenta is not None:
                 bloqueada = cuenta.registrar_intento_fallido(
                     ahora,
-                    self.settings.max_failed_login_attempts,
-                    self.settings.account_lock_minutes,
+                    self._parametro(INTENTOS_FALLIDOS),
+                    self._parametro(BLOQUEO_CUENTA),
                 )
             self.repo.registrar_auditoria(
                 "login_rechazado",
@@ -221,14 +275,14 @@ class AuthService:
                     "cuenta_bloqueada",
                     cuenta.id if cuenta is not None else None,
                     ip_login,
-                    {"minutos": self.settings.account_lock_minutes},
+                    {"minutos": self._parametro(BLOQUEO_CUENTA)},
                     ahora,
                 )
                 raise AccountLockedError(
                     "La cuenta fue bloqueada temporalmente por intentos fallidos.",
                     {
                         "codigo": "cuenta_bloqueada",
-                        "reintentosEnSegundos": self.settings.account_lock_minutes * 60,
+                        "reintentosEnSegundos": self._parametro(BLOQUEO_CUENTA) * 60,
                     },
                 )
             raise InvalidCredentialsError("Correo o contraseña inválidos.")
@@ -328,7 +382,7 @@ class AuthService:
         if cuenta is not None:
             token = self.token_manager.generate()
             token_hash = self.token_manager.hash_token(token)
-            expira_en = ahora + timedelta(minutes=self.settings.password_reset_ttl_minutes)
+            expira_en = ahora + timedelta(minutes=self._parametro(TTL_RECUPERACION))
             self.repo.crear_token_recuperacion(cuenta.id, token_hash, ahora, expira_en)
             reset_url = f"{self.settings.password_reset_url_base.rstrip('/')}?token={token}"
             try:
@@ -414,15 +468,21 @@ class AuthService:
             {"sesionesRevocadas": sesiones_revocadas},
             ahora,
         )
+        self._notificar_evento(
+            cuenta,
+            "password_reset",
+            clave_idempotencia=f"password_reset:{token.id}",
+            contexto={"nombre": cuenta.nombre},
+        )
         return ApiResponse[dict[str, str]](
             message="Contraseña actualizada correctamente.",
             data={"mensaje": "Ahora puedes iniciar sesión con tu nueva contraseña."},
         )
 
     def _emitir_sesion(self, cuenta: Account, ahora: datetime) -> tuple[LoginResponseData, str]:
-        access_seconds = self.settings.access_token_ttl_minutes * 60
+        access_seconds = self._parametro(TTL_ACCESO) * 60
         expira_access = ahora + timedelta(seconds=access_seconds)
-        expira_refresh = ahora + timedelta(days=self.settings.refresh_token_ttl_days)
+        expira_refresh = ahora + timedelta(days=self._parametro(TTL_REFRESCO))
         jti = secrets.token_urlsafe(12)
         access_token = self.session_token_manager.issue_access_token(
             cuenta_id=cuenta.id,
@@ -430,6 +490,7 @@ class AuthService:
             jti=jti,
             emitido_en=ahora,
             expira_en=expira_access,
+            scopes=permisos_para(cuenta.rol),
         )
         refresh_token = self.session_token_manager.generate_refresh_token()
         refresh_hash = self.session_token_manager.hash_refresh_token(refresh_token)
@@ -451,9 +512,10 @@ class AuthService:
     def _validar_contrasena(self, password: str) -> None:
         errores: list[str] = []
         configuracion = self.settings
+        longitud_minima = self._parametro(LONGITUD_CONTRASENA)
 
-        if len(password) < configuracion.password_min_length:
-            errores.append(f"Debe tener al menos {configuracion.password_min_length} caracteres.")
+        if len(password) < longitud_minima:
+            errores.append(f"Debe tener al menos {longitud_minima} caracteres.")
         if configuracion.password_require_uppercase and not any(caracter.isupper() for caracter in password):
             errores.append("Debe incluir al menos una letra mayúscula.")
         if configuracion.password_require_lowercase and not any(caracter.islower() for caracter in password):
