@@ -18,6 +18,7 @@ from app.api.v1.categories import router as categories_router
 from app.api.v1.media import router as media_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.products import router as products_router
+from app.api.v1.publication_control import router as publication_control_router
 from app.api.v1.showcase import router as showcase_router
 from app.api.v1.users import router as users_router
 from app.cache.auth_parameters import InMemoryAuthParametersCache
@@ -28,6 +29,9 @@ from app.core.responses import ApiResponse, ok
 from app.domain.exceptions import CatalogError
 from app.repository.audit import SQLiteAuditRepository
 from app.repository.auth_parameters import SQLiteAuthParameterRepository
+from app.repository.email_repository import build_notification_sender
+from app.repository.events import InMemoryEventBus
+from app.repository.notifications import notification_repository
 from app.repository.categories import SQLiteCategoryRepository
 from app.repository.auth_repository import auth_repository
 from app.repository.database import Database
@@ -36,7 +40,9 @@ from app.repository.products import SQLiteProductRepository
 from app.services.auth_parameters import AuthParametersService
 from app.services.categories import CategoryService
 from app.services.media import MediaService
+from app.services.notifications import NotificationService
 from app.services.products import ProductService
+from app.services.publication_control import PublicationControlService
 from app.services.profile_service import ProfileService
 
 DESCRIPTION = """
@@ -48,7 +54,7 @@ API REST de Digiverso con arquitectura de capas.
 - **Roles y permisos**: asignación de roles (AUT-09) y consulta/validación de permisos.
 - **Notificaciones**: preferencias, bandeja, lectura y cola de entrega (AUT-10/AUT-11).
 - **Administración**: consulta y actualización versionada de los parámetros de autenticación.
-- **Catálogo**: árbol de categorías, ciclo de vida de productos, medios del producto y búsqueda/vitrina.
+- **Catálogo**: árbol de categorías, ciclo de vida de productos, medios del producto, búsqueda/vitrina y control de publicaciones (HU-11).
 - **Root**: estado del servicio.
 
 Todas las respuestas usan el sobre `message`, `data` y `success`.
@@ -110,6 +116,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             settings=settings,
             showcase_cache=application.state.product_service.showcase_cache,
         )
+        notification_service = NotificationService(
+            repo=notification_repository,
+            settings=settings,
+            clock=auth_service.clock,
+            sender=build_notification_sender(settings),
+        )
+        # No se expone como ``notifications_service``: el endpoint de bandeja
+        # construye el suyo con el reloj de la sesión (HU-05/HU-11).
+        event_bus = InMemoryEventBus()
+        application.state.event_bus = event_bus
+        application.state.publication_control_service = PublicationControlService(
+            repository=product_repository,
+            audit_repository=audit_repository,
+            settings=settings,
+            event_bus=event_bus,
+            notifier=notification_service,
+            clock=auth_service.clock,
+            showcase_cache=application.state.product_service.showcase_cache,
+        )
         yield
 
     application = FastAPI(
@@ -165,6 +190,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             {
                 "name": "Catálogo · Búsqueda y vitrina",
                 "description": "Búsqueda, filtros, vitrina por categoría y detalle público.",
+            },
+            {
+                "name": "Catálogo · Control de publicaciones",
+                "description": "Cola de revisión, aprobación y rechazo con evidencia, evento y notificación.",
             },
             {
                 "name": "Root",
@@ -254,6 +283,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(products_router)
     application.include_router(media_router)
     application.include_router(showcase_router)
+    application.include_router(publication_control_router)
 
     @application.get(
         "/",

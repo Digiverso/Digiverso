@@ -4,8 +4,9 @@ API del marketplace Digiverso. Incluye los módulos **Autenticación**
 (HU-01, HU-02, perfil HU-03/FUN-07 a FUN-08, roles HU-04, notificaciones HU-05
 y parametrización HU-06/FUN-16), **Catálogo · Categorías**
 (HU-07, FUN-17 a FUN-20), **Catálogo · Productos** (HU-08, FUN-21 a FUN-25),
-**Catálogo · Medios del producto** (HU-09, FUN-26 y FUN-27) y
-**Catálogo · Búsqueda, vitrina y detalle** (HU-10, FUN-28 a FUN-31).
+**Catálogo · Medios del producto** (HU-09, FUN-26 y FUN-27),
+**Catálogo · Búsqueda, vitrina y detalle** (HU-10, FUN-28 a FUN-31) y
+**Catálogo · Control de publicaciones** (HU-11, FUN-32 a FUN-34 y FUN-38).
 
 ## Instalación y ejecución
 
@@ -116,5 +117,18 @@ Documentación funcional:
 
 Documentación funcional:
 [`docs/HU-10_busqueda_filtros_vitrina_y_detalle.md`](docs/HU-10_busqueda_filtros_vitrina_y_detalle.md).
+
+## Endpoints de control de publicaciones
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/api/v1/catalog/publication-control/queue` | Cola de revisión ordenada por antigüedad (200/403) |
+| `PATCH` | `/api/v1/catalog/publication-control/{id}/approve` | Aprobar con checklist completo (200/400/403/404/409) |
+| `PATCH` | `/api/v1/catalog/publication-control/{id}/reject` | Rechazar con motivo CAT-14 y observación (200/400/403/404/409) |
+
+Solo administradores; un administrador no puede revisar sus propios productos.
+Cada decisión queda auditada con evidencia y publica el evento `product.reviewed`,
+además de notificar al productor (FUN-38). Documentación funcional:
+[`docs/HU-11_control_de_publicaciones.md`](docs/HU-11_control_de_publicaciones.md).
 
 Todas las respuestas usan el sobre `{ "message", "data", "success" }`.

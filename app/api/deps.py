@@ -12,6 +12,7 @@ from app.services.auth_parameters import AuthParametersService
 from app.services.categories import CategoryService
 from app.services.media import MediaService
 from app.services.products import ProductService
+from app.services.publication_control import PublicationControlService
 
 
 def get_auth_parameters_service(request: Request) -> AuthParametersService:
@@ -28,6 +29,10 @@ def get_product_service(request: Request) -> ProductService:
 
 def get_media_service(request: Request) -> MediaService:
     return request.app.state.media_service
+
+
+def get_publication_control_service(request: Request) -> PublicationControlService:
+    return request.app.state.publication_control_service
 
 
 def get_actor(

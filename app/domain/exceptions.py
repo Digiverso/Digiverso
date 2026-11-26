@@ -136,3 +136,17 @@ class AuthParameterVersionNotFoundError(CatalogError):
 class InvalidCatalogQueryError(CatalogError):
     status_code = 422
     code = "CATALOG_QUERY_INVALID"
+
+
+# ------------------------------------------------------------------ HU-11
+class InvalidPublicationReviewError(CatalogError):
+    """Checklist incompleto, motivo CAT-14 inválido u observación ausente."""
+
+    status_code = 400
+    code = "REVIEW_DECISION_INVALID"
+
+
+class ReviewForbiddenError(ForbiddenError):
+    """El actor no es administrador o revisa un producto de su autoría."""
+
+    code = "REVIEW_FORBIDDEN"
