@@ -10,9 +10,11 @@ from fastapi.exceptions import RequestValidationError
 from starlette.responses import JSONResponse
 
 from app.api.auth_router import router as auth_router
+from app.api.dependencies import build_auth_service
 from app.api.errors import register_exception_handlers
 from app.api.v1.categories import router as categories_router
 from app.api.v1.products import router as products_router
+from app.api.v1.users import router as users_router
 from app.cache.category_tree import InMemoryCategoryTreeCache
 from app.core.config import Settings, get_settings, settings as default_settings
 from app.core.responses import ApiResponse, ok
@@ -20,16 +22,18 @@ from app.domain.exceptions import CatalogError
 from app.repository.audit import SQLiteAuditRepository
 from app.repository.categories import SQLiteCategoryRepository
 from app.repository.database import Database
+from app.repository.photo_storage import build_photo_storage
 from app.repository.products import SQLiteProductRepository
 from app.services.categories import CategoryService
 from app.services.products import ProductService
+from app.services.profile_service import ProfileService
 
 DESCRIPTION = """
 API REST de Digiverso con arquitectura de capas.
 
 ## Módulos
 
-- **Autenticación**: registro, verificación de correo e inicio de sesión.
+- **Autenticación**: registro, verificación de correo, sesión y perfil de usuario.
 - **Catálogo**: gestión del árbol de categorías y ciclo de vida de productos.
 - **Root**: estado del servicio.
 
@@ -47,6 +51,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         database = Database(settings.database_path)
         application.state.settings = settings
         application.state.database = database
+        auth_service = build_auth_service(settings)
+        photo_storage = build_photo_storage(settings)
+        application.state.auth_service = auth_service
+        application.state.photo_storage = photo_storage
+        application.state.profile_service = ProfileService(
+            repo=auth_service.repo,
+            settings=settings,
+            photo_storage=photo_storage,
+            clock=auth_service.clock,
+        )
         application.state.category_service = CategoryService(
             repository=SQLiteCategoryRepository(database),
             audit_repository=SQLiteAuditRepository(database),
@@ -71,6 +85,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             {
                 "name": "Autenticación",
                 "description": "Registro de visitantes, verificación de cuenta y acceso.",
+            },
+            {
+                "name": "Usuarios",
+                "description": "Consulta y edición del perfil del usuario autenticado.",
             },
             {
                 "name": "Catálogo · Categorías",
@@ -116,7 +134,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
         errores = exc.errors()
-        if request.url.path.startswith("/api/v1/auth"):
+        if request.url.path.startswith(("/api/v1/auth", "/api/v1/users")):
             # Formato acordado en HU-01: 400 con campo/mensaje.
             detalle = [
                 {
@@ -149,6 +167,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     application.include_router(auth_router)
+    application.include_router(users_router)
     application.include_router(categories_router)
     application.include_router(products_router)
 

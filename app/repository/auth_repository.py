@@ -72,6 +72,23 @@ class AuthRepository:
         with self._lock:
             return self._accounts.get(cuenta_id)
 
+    def actualizar_perfil(
+        self,
+        cuenta_id: str,
+        *,
+        nombre: str,
+        biografia: str | None,
+        foto: str | None,
+    ) -> Account | None:
+        with self._lock:
+            cuenta = self._accounts.get(cuenta_id)
+            if cuenta is None:
+                return None
+            cuenta.nombre = nombre
+            cuenta.biografia = biografia
+            cuenta.foto = foto
+            return cuenta
+
     def actualizar_password(self, cuenta_id: str, password_hash: str) -> Account | None:
         with self._lock:
             cuenta = self._accounts.get(cuenta_id)
@@ -151,6 +168,17 @@ class AuthRepository:
                     sesion
                     for sesion in self._sessions.values()
                     if sesion.refresh_token_hash == refresh_token_hash
+                ),
+                None,
+            )
+
+    def sesion_por_jti(self, access_token_jti: str) -> Session | None:
+        with self._lock:
+            return next(
+                (
+                    sesion
+                    for sesion in self._sessions.values()
+                    if sesion.access_token_jti == access_token_jti
                 ),
                 None,
             )
