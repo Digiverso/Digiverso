@@ -30,8 +30,19 @@ Requieren `Authorization: Bearer <accessToken>` obtenido en `POST /api/v1/auth/l
 |---|---|---|
 | `GET` | `/api/v1/users/me` | Consultar el perfil propio (200) |
 | `PATCH` | `/api/v1/users/me` | Editar nombre, biografía o foto (200) |
+| `GET` | `/api/v1/users/me/permissions` | Consultar permisos efectivos (200) |
 
 Documentación funcional: [`docs/HU-03_perfil_de_usuario.md`](docs/HU-03_perfil_de_usuario.md).
+
+## Roles y permisos
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `POST` | `/api/v1/admin/users/{id}/roles` | Asignar rol permitido por AUT-09 (200/400/403/404/409) |
+
+Acepta sesión RS256, token de actor o `X-Actor-Id` / `X-Actor-Roles`; requiere
+permiso `admin.users.roles.write`. Documentación funcional:
+[`docs/HU-04_roles_y_permisos.md`](docs/HU-04_roles_y_permisos.md).
 
 ## Endpoints de parámetros de autenticación
 

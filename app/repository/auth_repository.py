@@ -97,6 +97,20 @@ class AuthRepository:
             cuenta.actualizar_password(password_hash)
             return cuenta
 
+    def actualizar_rol(self, cuenta_id: str, rol: Role) -> Account | None:
+        """Asigna el rol (HU-04); devuelve ``None`` si la cuenta no existe."""
+
+        with self._lock:
+            cuenta = self._accounts.get(cuenta_id)
+            if cuenta is None:
+                return None
+            cuenta.rol = rol
+            return cuenta
+
+    def contar_por_rol(self, rol: Role) -> int:
+        with self._lock:
+            return sum(1 for cuenta in self._accounts.values() if cuenta.rol is rol)
+
     def crear_token_verificacion(
         self,
         cuenta_id: str,
