@@ -22,7 +22,7 @@ password_recovery_rate_limiter = RateLimiter(
 )
 
 
-def get_auth_service() -> AuthService:
+def get_auth_service(request: Request) -> AuthService:
     return AuthService(
         repo=auth_repository,
         settings=settings,
@@ -30,6 +30,7 @@ def get_auth_service() -> AuthService:
         rate_limiter=register_rate_limiter,
         login_rate_limiter=login_rate_limiter,
         password_rate_limiter=password_recovery_rate_limiter,
+        parameters=getattr(request.app.state, "auth_parameters_service", None),
     )
 
 
