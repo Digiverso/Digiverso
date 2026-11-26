@@ -1,6 +1,7 @@
 # Digiverso API
 
-API del marketplace Digiverso. Incluye los módulos **Catálogo · Categorías**
+API del marketplace Digiverso. Incluye los módulos **Autenticación**
+(HU-01, HU-02 y parametrización HU-06/FUN-16), **Catálogo · Categorías**
 (HU-07, FUN-17 a FUN-20), **Catálogo · Productos** (HU-08, FUN-21 a FUN-25) y
 **Catálogo · Medios del producto** (HU-09, FUN-26 y FUN-27).
 
@@ -20,6 +21,19 @@ Documentación interactiva (OpenAPI): <http://localhost:8000/docs>
 ```bash
 pytest -q
 ```
+
+## Endpoints de parámetros de autenticación
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/api/v1/admin/auth/parameters` | Parámetros vigentes, versión y validaciones (200) |
+| `PUT` | `/api/v1/admin/auth/parameters` | Validar y guardar una nueva versión (200) |
+| `GET` | `/api/v1/admin/auth/parameters/history` | Historial de versiones inmutables (200) |
+| `GET` | `/api/v1/admin/auth/parameters/history/{version}` | Detalle de una versión (200/404) |
+
+Requieren rol `administrador` o el alcance `admin.auth.parameters.write`.
+Documentación funcional:
+[`docs/HU-06_parametrizacion_de_autenticacion.md`](docs/HU-06_parametrizacion_de_autenticacion.md).
 
 ## Endpoints de categorías
 

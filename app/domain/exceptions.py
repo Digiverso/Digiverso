@@ -101,3 +101,32 @@ class MediaScanError(CatalogError):
 class MediaNotFoundError(CatalogError):
     status_code = 404
     code = "MEDIA_NOT_FOUND"
+
+
+# ------------------------------------------------------------------ HU-06
+class InvalidAuthParameterError(CatalogError):
+    """Parámetro de autenticación inválido (rango, tipo o dependencia)."""
+
+    status_code = 400
+    code = "AUTH_PARAMETER_INVALID"
+
+
+# Alias descriptivo para la familia de errores de parametrización.
+AuthParameterError = InvalidAuthParameterError
+
+
+class AuthParameterModuleError(AuthParameterError):
+    code = "AUTH_PARAMETER_MODULE"
+
+
+class AuthParameterNotFoundError(AuthParameterError):
+    code = "AUTH_PARAMETER_NOT_FOUND"
+
+
+class AuthParametersForbiddenError(ForbiddenError):
+    code = "AUTH_PARAMETERS_FORBIDDEN"
+
+
+class AuthParameterVersionNotFoundError(CatalogError):
+    status_code = 404
+    code = "AUTH_PARAMETER_VERSION_NOT_FOUND"

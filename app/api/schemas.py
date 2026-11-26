@@ -1,11 +1,13 @@
-"""Esquemas Pydantic del catálogo (categorías y productos)."""
+"""Esquemas Pydantic del catálogo (categorías y productos) y de HU-06."""
 
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.domain.auth_parameters import AUTH_MODULO, AuthParameterVersion
 from app.domain.category import Category
 from app.domain.product import MEDIO_ELIMINADO, Medio, Product
 
@@ -231,3 +233,100 @@ class MediaDeleteResponse(BaseModel):
 
 MediaUploadResponse.model_rebuild()
 MediaDeleteResponse.model_rebuild()
+
+
+# ------------------------------------------------------------ HU-06 (SUB-07)
+class AuthParameterValidationSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    tipo: str
+    minimo: int | None = None
+    maximo: int | None = None
+    requerido: bool = True
+
+
+class AuthParameterDetail(BaseModel):
+    """Metadato completo de un parámetro: código, valor, tipo y validación."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    codigo: str
+    nombre: str
+    descripcion: str
+    modulo: str
+    valor: int
+    tipo: str
+    validacion: AuthParameterValidationSchema
+    dependencias: list[str] = Field(default_factory=list)
+
+
+class AuthParametersData(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    version: int
+    vigente_desde: datetime = Field(alias="vigenteDesde")
+    modulo: str
+    parametros: dict[str, int]
+    definiciones: list[AuthParameterDetail]
+    actualizado_por: str | None = Field(default=None, alias="actualizadoPor")
+    motivo: str = ""
+
+    @classmethod
+    def from_version(
+        cls, version: AuthParameterVersion, definiciones: list[AuthParameterDetail]
+    ) -> AuthParametersData:
+        return cls(
+            version=version.version,
+            vigente_desde=version.vigente_desde,
+            modulo=version.modulo,
+            parametros=dict(version.valores),
+            definiciones=definiciones,
+            actualizado_por=version.actor_id or None,
+            motivo=version.motivo,
+        )
+
+
+class AuthParameterVersionItem(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    version: int
+    vigente_desde: datetime = Field(alias="vigenteDesde")
+    modulo: str
+    parametros: dict[str, int]
+    anteriores: dict[str, int]
+    actor_id: str = Field(alias="actorId")
+    actor_roles: list[str] = Field(alias="actorRoles")
+    motivo: str = ""
+    actual: bool = False
+
+    @classmethod
+    def from_version(
+        cls, version: AuthParameterVersion, *, actual: bool = False
+    ) -> AuthParameterVersionItem:
+        return cls(
+            version=version.version,
+            vigente_desde=version.vigente_desde,
+            modulo=version.modulo,
+            parametros=dict(version.valores),
+            anteriores=dict(version.anteriores),
+            actor_id=version.actor_id,
+            actor_roles=list(version.actor_roles),
+            motivo=version.motivo,
+            actual=actual,
+        )
+
+
+class AuthParametersHistoryData(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    version_actual: int = Field(alias="versionActual")
+    total: int
+    versiones: list[AuthParameterVersionItem]
+
+
+class AuthParametersUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    modulo: str = AUTH_MODULO
+    parametros: dict[str, Any]
+    motivo: str | None = None
