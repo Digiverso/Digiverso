@@ -1,15 +1,16 @@
-"""Esquemas Pydantic del catálogo (categorías y productos) y de HU-06."""
+"""Esquemas Pydantic del catálogo, HU-06 y roles/permisos (HU-04)."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
+from app.domain.auth import Role
 from app.domain.auth_parameters import AUTH_MODULO, AuthParameterVersion
 from app.domain.category import Category
-from app.domain.product import Product
+from app.domain.product import MEDIO_ELIMINADO, Medio, Product
 
 
 class CategoryNode(BaseModel):
@@ -115,6 +116,18 @@ class MedioResponse(BaseModel):
     tipo: str
     url: str
     orden: int = 0
+    estado: str = "activo"
+
+
+class LicenciaUsuarioResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    producto_id: str = Field(alias="productoId")
+    actor_id: str = Field(default="", alias="actorId")
+    tipo: str
+    vigente: bool
+    creado_en: str = Field(alias="creadoEn")
 
 
 class ProductResponse(BaseModel):
@@ -127,17 +140,30 @@ class ProductResponse(BaseModel):
     moneda: str
     edad_minima: int = Field(alias="edadMinima")
     edad_maxima: int = Field(alias="edadMaxima")
+    autor: str = ""
+    calificacion: float = 0.0
+    miniatura: str | None = None
+    categoria: str | None = None
     categorias: list[str]
     estado: str
-    autor_id: str = Field(alias="autorId")
+    # HU-10: el identificador del productor y el total de licencias solo se
+    # exponen al propio autor o a un administrador.
+    autor_id: str | None = Field(default=None, alias="autorId")
     medios: list[MedioResponse]
     creado_en: datetime = Field(alias="creadoEn")
     actualizado_en: datetime = Field(alias="actualizadoEn")
     licencias_activas: int = Field(default=0, alias="licenciasActivas")
+    licencia: LicenciaUsuarioResponse | None = None
 
     @classmethod
     def from_product(
-        cls, product: Product, *, licencias_activas: int = 0
+        cls,
+        product: Product,
+        *,
+        licencias_activas: int = 0,
+        incluir_privados: bool = True,
+        categoria: str | None = None,
+        licencia: dict[str, Any] | None = None,
     ) -> ProductResponse:
         return cls(
             id=product.id,
@@ -147,18 +173,28 @@ class ProductResponse(BaseModel):
             moneda=product.moneda,
             edad_minima=product.edad_minima,
             edad_maxima=product.edad_maxima,
+            autor=product.autor_nombre or "Autor Digiverso",
+            calificacion=product.calificacion,
+            miniatura=product.miniatura,
+            categoria=categoria,
             categorias=product.categorias,
             estado=product.estado,
-            autor_id=product.autor_id,
+            autor_id=product.autor_id if incluir_privados else None,
             medios=[
                 MedioResponse(
-                    id=medio.id, tipo=medio.tipo, url=medio.url, orden=medio.orden
+                    id=medio.id,
+                    tipo=medio.tipo,
+                    url=medio.url,
+                    orden=medio.orden,
+                    estado=medio.estado,
                 )
-                for medio in product.medios
+                for medio in sorted(product.medios, key=lambda item: item.orden)
+                if medio.visible
             ],
             creado_en=product.creado_en,
             actualizado_en=product.actualizado_en,
-            licencias_activas=licencias_activas,
+            licencias_activas=licencias_activas if incluir_privados else 0,
+            licencia=LicenciaUsuarioResponse(**licencia) if licencia else None,
         )
 
 
@@ -190,6 +226,43 @@ class ProductTransition(ProductResponse):
 
 ProductResponse.model_rebuild()
 ProductTransition.model_rebuild()
+
+
+# ------------------------------------------------------------ HU-09 (SUB-10)
+class MediaUploadResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    producto_id: str = Field(alias="productoId")
+    tipo: str
+    url: str
+    orden: int
+    estado: str
+
+    @classmethod
+    def from_medio(cls, producto_id: str, medio: Medio) -> MediaUploadResponse:
+        return cls(
+            id=medio.id,
+            producto_id=producto_id,
+            tipo=medio.tipo,
+            url=medio.url,
+            orden=medio.orden,
+            estado=medio.estado,
+        )
+
+
+class MediaDeleteResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    producto_id: str = Field(alias="productoId")
+    estado: str = MEDIO_ELIMINADO
+    total_medios: int = Field(alias="totalMedios")
+    medios: list[MedioResponse]
+
+
+MediaUploadResponse.model_rebuild()
+MediaDeleteResponse.model_rebuild()
 
 
 # ------------------------------------------------------------ HU-06 (SUB-07)
@@ -287,3 +360,141 @@ class AuthParametersUpdateRequest(BaseModel):
     modulo: str = AUTH_MODULO
     parametros: dict[str, Any]
     motivo: str | None = None
+
+
+# ------------------------------------------------------------ HU-10 (SUB-11/12)
+class ProductSearchItem(BaseModel):
+    """Ítem público de búsqueda/vitrina: sin identificadores privados."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    nombre: str
+    precio: int
+    moneda: str
+    autor: str
+    categoria: str | None = None
+    categoria_id: str | None = Field(default=None, alias="categoriaId")
+    calificacion: float = 0.0
+    miniatura: str | None = None
+    edad_minima: int = Field(alias="edadMinima")
+    edad_maxima: int = Field(alias="edadMaxima")
+
+    @classmethod
+    def from_product(
+        cls, product: Product, *, categoria: str | None = None
+    ) -> ProductSearchItem:
+        return cls(
+            id=product.id,
+            nombre=product.nombre,
+            precio=product.precio,
+            moneda=product.moneda,
+            autor=product.autor_nombre or "Autor Digiverso",
+            categoria=categoria or product.categoria_id,
+            categoria_id=product.categoria_id,
+            calificacion=product.calificacion,
+            miniatura=product.miniatura,
+            edad_minima=product.edad_minima,
+            edad_maxima=product.edad_maxima,
+        )
+
+
+class ProductSearchPage(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    items: list[ProductSearchItem]
+    total: int
+    pagina: int
+    tamanio_pagina: int = Field(alias="tamanioPagina")
+
+
+class ShowcaseCategory(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    nombre: str
+    total: int
+    productos: list[ProductSearchItem]
+
+
+class ShowcaseData(BaseModel):
+    categorias: list[ShowcaseCategory]
+    total: int
+
+
+# ------------------------------------------------------------ HU-04 (SUB-05)
+class RoleAssignmentRequest(BaseModel):
+    """Cuerpo de PRC-09; ``rol`` se valida en el servicio contra AUT-09."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    rol: str = Field(
+        ...,
+        validation_alias=AliasChoices("rol", "role"),
+        description="Rol permitido por AUT-09: consumidor, productor o administrador.",
+    )
+
+
+class RoleAssignmentData(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    usuario_id: str = Field(alias="usuarioId")
+    rol_anterior: Role = Field(alias="rolAnterior")
+    rol_nuevo: Role = Field(alias="rolNuevo")
+
+
+class UserPermissionsData(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    usuario_id: str = Field(alias="usuarioId")
+    rol: Role
+    permisos: list[str]
+    recursos: list[str]
+
+
+# ------------------------------------------------------------ HU-05 (SUB-06)
+class NotificationPreferencesRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    canales: list[str]
+    tipos: list[str]
+
+
+class NotificationPreferencesData(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    canales: list[str]
+    tipos: list[str]
+
+
+class NotificationItem(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    tipo: str
+    mensaje: str
+    canal: str
+    leida: bool
+    fecha: datetime
+
+    @classmethod
+    def from_notification(cls, notification) -> NotificationItem:
+        return cls(
+            id=notification.id,
+            tipo=notification.tipo.value,
+            mensaje=notification.mensaje,
+            canal=notification.canal.value,
+            leida=notification.leida,
+            fecha=notification.creado_en,
+        )
+
+
+class NotificationListData(BaseModel):
+    items: list[NotificationItem]
+    pagina: int
+    total: int
+
+
+class NotificationReadData(BaseModel):
+    id: str
+    leida: bool

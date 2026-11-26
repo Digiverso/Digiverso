@@ -10,6 +10,7 @@ from app.domain.actor import ADMIN_ROLE, Actor
 from app.domain.exceptions import ForbiddenError
 from app.services.auth_parameters import AuthParametersService
 from app.services.categories import CategoryService
+from app.services.media import MediaService
 from app.services.products import ProductService
 
 
@@ -23,6 +24,10 @@ def get_category_service(request: Request) -> CategoryService:
 
 def get_product_service(request: Request) -> ProductService:
     return request.app.state.product_service
+
+
+def get_media_service(request: Request) -> MediaService:
+    return request.app.state.media_service
 
 
 def get_actor(

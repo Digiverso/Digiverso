@@ -50,6 +50,22 @@ ESTADOS_ARCHIVABLES = frozenset(
 TIPOS_MEDIO = ("imagen", "video", "documento")
 _ALIAS_TIPOS_MEDIO = {"image": "imagen", "images": "imagen", "video": "video", "document": "documento"}
 
+# FUN-26/FUN-27: ciclo de estado de un medio. ``en_analisis`` y ``rechazado``
+# son estados de tránsito del escaneo; solo ``activo`` y ``eliminado`` se
+# persisten. Los medios eliminados siguen en la lista (borrado lógico) pero no
+# cuentan para CAT-10 ni aparecen en la ficha del producto.
+MEDIO_EN_ANALISIS = "en_analisis"
+MEDIO_ACTIVO = "activo"
+MEDIO_RECHAZADO = "rechazado"
+MEDIO_ELIMINADO = "eliminado"
+ESTADOS_MEDIO = (
+    MEDIO_EN_ANALISIS,
+    MEDIO_ACTIVO,
+    MEDIO_RECHAZADO,
+    MEDIO_ELIMINADO,
+)
+MEDIOS_VISIBLES = frozenset({MEDIO_EN_ANALISIS, MEDIO_ACTIVO})
+
 
 def _es_entero(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
@@ -61,10 +77,15 @@ class Medio:
     tipo: str = "imagen"
     id: str | None = None
     orden: int = 0
+    estado: str = MEDIO_ACTIVO
 
     @property
     def es_imagen(self) -> bool:
         return self.tipo == "imagen"
+
+    @property
+    def visible(self) -> bool:
+        return self.estado in MEDIOS_VISIBLES
 
 
 def build_medio(value: object) -> Medio:
@@ -105,11 +126,19 @@ def build_medio(value: object) -> Medio:
             details={"orden": orden},
         )
 
+    estado = str(value.get("estado", MEDIO_ACTIVO) or MEDIO_ACTIVO).strip().lower()
+    if estado not in ESTADOS_MEDIO:
+        raise InvalidProductError(
+            "El estado del medio no es válido.",
+            details={"estado": estado, "permitidos": list(ESTADOS_MEDIO)},
+        )
+
     return Medio(
         id=str(value["id"]) if value.get("id") else None,
         tipo=tipo,
         url=url,
         orden=int(orden),
+        estado=estado,
     )
 
 
@@ -216,6 +245,25 @@ def validate_categorias(value: object, *, maximo: int) -> list[str]:
     return categorias
 
 
+def validate_calificacion(value: object) -> float:
+    """Calificación pública (0–5); ``0`` cuando aún no hay reseñas."""
+
+    if value is None:
+        return 0.0
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise InvalidProductError(
+            "La calificación debe ser un número entre 0 y 5.",
+            details={"campo": "calificacion", "valor": value},
+        )
+    calificacion = round(float(value), 1)
+    if calificacion < 0 or calificacion > 5:
+        raise InvalidProductError(
+            "La calificación debe estar entre 0 y 5.",
+            details={"campo": "calificacion", "valor": calificacion},
+        )
+    return calificacion
+
+
 def validate_medios(value: object) -> list[Medio]:
     if value is None:
         return []
@@ -261,6 +309,8 @@ class Product:
     precio: int
     autor_id: str
     categoria_id: str | None = None
+    autor_nombre: str = ""
+    calificacion: float = 0.0
     moneda: str = MONEDA_POR_DEFECTO
     edad_minima: int = 0
     edad_maxima: int = 99
@@ -279,6 +329,15 @@ class Product:
     def publicado(self) -> bool:
         return self.estado == ESTADO_PUBLICADO and self.activo
 
+    @property
+    def miniatura(self) -> str | None:
+        """Primera imagen declarada; se usa en la vitrina y en la búsqueda."""
+
+        for medio in sorted(self.medios, key=lambda item: item.orden):
+            if medio.es_imagen:
+                return medio.url
+        return None
+
     def content(self) -> dict[str, Any]:
         """Contenido comparado al reactivar después de un archivo."""
 
@@ -293,6 +352,7 @@ class Product:
             "medios": [
                 {"id": medio.id, "tipo": medio.tipo, "url": medio.url, "orden": medio.orden}
                 for medio in self.medios
+                if medio.visible
             ],
         }
 

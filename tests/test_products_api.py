@@ -212,7 +212,7 @@ def test_archivar_con_licencias_las_conserva_y_retira_de_la_vitrina(
 ):
     product_id = _publicar(client, create_product)
     product_service.attach_license(product_id, tipo="estandar")
-    assert len(_body(client.get(PRODUCTS_URL))["data"]) == 1
+    assert len(_body(client.get(PRODUCTS_URL))["data"]["items"]) == 1
 
     response = client.patch(
         f"{PRODUCTS_URL}/{product_id}/archive", headers=PRODUCTOR
@@ -225,7 +225,7 @@ def test_archivar_con_licencias_las_conserva_y_retira_de_la_vitrina(
     assert data["fecha"] is not None
     assert data["licenciasActivas"] == 1
     assert [lic["vigente"] for lic in product_service.repository.list_licenses(product_id)] == [True]
-    assert _body(client.get(PRODUCTS_URL))["data"] == []
+    assert _body(client.get(PRODUCTS_URL))["data"]["items"] == []
 
 
 # Caso 6 --------------------------------------------------------------------
