@@ -166,5 +166,5 @@ pytest -q
 `tests/test_media_domain.py` cubre firmas, límites, conteo y reordenamiento;
 `tests/test_media_api.py` cubre los cinco casos de la historia más autoría,
 estado editable, extensión engañosa, escaneo, auditoría y la invalidación de la
-vitrina de HU-10. Tras integrar HU-06 y HU-10, la suite completa pasa con
-128 pruebas.
+vitrina de HU-10. Tras integrar HU-03/04/05/06 y HU-10, la suite completa
+pasa con 162 pruebas.

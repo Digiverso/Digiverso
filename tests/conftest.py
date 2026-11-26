@@ -25,12 +25,14 @@ from app.repository.auth_repository import auth_repository
 from app.repository.categories import SQLiteCategoryRepository
 from app.repository.database import Database
 from app.repository.email_repository import EmailDelivery
+from app.repository.photo_storage import build_photo_storage
 from app.repository.products import SQLiteProductRepository
 from app.services.auth_parameters import AuthParametersService
 from app.services.auth_service import AuthService
 from app.services.categories import CategoryService
 from app.services.media import MediaService
 from app.services.products import ProductService
+from app.services.profile_service import ProfileService
 
 CATEGORIES_URL = "/api/v1/catalog/categories"
 PRODUCTS_URL = "/api/v1/catalog/products"
@@ -173,6 +175,7 @@ def category_settings(tmp_path: Path) -> Settings:
         default_actor_id="usr_admin",
         media_storage_dir=tmp_path / "media",
         media_url_base="https://cdn.test/products",
+        profile_photo_storage_path=tmp_path / "photos",
     )
 
 
@@ -289,8 +292,15 @@ def client(
         # El factory crea su propio servicio; usamos el de la fixture para
         # poder inspeccionar repositorio, caché y auditoría desde las pruebas.
         test_client.app.state.auth_parameters_service = auth_parameters_service
+        test_client.app.state.auth_service = service
         test_client.app.state.category_service = category_service
         test_client.app.state.product_service = product_service
         test_client.app.state.media_service = media_service
+        test_client.app.state.profile_service = ProfileService(
+            repo=auth_repository,
+            settings=category_settings,
+            photo_storage=build_photo_storage(category_settings),
+            clock=service.clock,
+        )
         yield test_client
     test_app.dependency_overrides.clear()

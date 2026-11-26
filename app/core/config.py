@@ -47,6 +47,15 @@ def _as_tuple(value: str) -> tuple[str, ...]:
     return tuple(item.strip().lower() for item in value.split(",") if item.strip())
 
 
+def _as_formats(value: str) -> tuple[str, ...]:
+    formatos = tuple(
+        parte.strip().lower().replace("jpg", "jpeg")
+        for parte in value.split(",")
+        if parte.strip()
+    )
+    return formatos or ("jpeg", "png", "webp")
+
+
 @dataclass(frozen=True)
 class Settings:
     """Parámetros de ejecución de todos los módulos implementados.
@@ -93,6 +102,24 @@ class Settings:
     account_lock_minutes: int = 15
     login_rate_limit: int = 10
     password_recovery_rate_limit: int = 5
+
+    # Perfil de usuario (HU-03)
+    profile_name_min_length: int = 2
+    profile_name_max_length: int = 100
+    profile_biografia_max_length: int = 500
+    profile_photo_max_bytes: int = 2 * 1024 * 1024  # AUT-12
+    profile_photo_allowed_formats: tuple[str, ...] = ("jpeg", "png", "webp")
+    profile_photo_storage_path: Path = field(
+        default_factory=lambda: Path("./uploads/profiles")
+    )
+    profile_photo_cdn_base_url: str = "https://cdn.digiverso.com"
+    profile_photo_bucket: str = ""
+    profile_photo_s3_region: str = "us-east-1"
+    profile_photo_s3_endpoint: str = ""
+
+    # Notificaciones (HU-05). AUT-10 fija canales/tipos y AUT-11 la retención.
+    notification_retention_days: int = 30
+    notification_max_retries: int = 3
 
     # Catálogo (HU-07)
     database_path: Path = field(
@@ -201,6 +228,24 @@ def load_settings() -> Settings:
         account_lock_minutes=int(value("AUTH_ACCOUNT_LOCK_MINUTES", "15")),
         login_rate_limit=int(value("AUTH_LOGIN_RATE_LIMIT", "10")),
         password_recovery_rate_limit=int(value("AUTH_PASSWORD_RECOVERY_RATE_LIMIT", "5")),
+        profile_name_min_length=int(value("PROFILE_NAME_MIN_LENGTH", "2")),
+        profile_name_max_length=int(value("PROFILE_NAME_MAX_LENGTH", "100")),
+        profile_biografia_max_length=int(value("PROFILE_BIOGRAFIA_MAX_LENGTH", "500")),
+        profile_photo_max_bytes=int(value("AUT_12_MAX_BYTES", str(2 * 1024 * 1024))),
+        profile_photo_allowed_formats=_as_formats(
+            value("AUT_12_ALLOWED_FORMATS", "jpeg,png,webp")
+        ),
+        profile_photo_storage_path=Path(
+            value("PROFILE_PHOTO_STORAGE_PATH", "./uploads/profiles")
+        ),
+        profile_photo_cdn_base_url=value(
+            "PROFILE_PHOTO_CDN_BASE_URL", "https://cdn.digiverso.com"
+        ),
+        profile_photo_bucket=value("PROFILE_PHOTO_BUCKET", ""),
+        profile_photo_s3_region=value("PROFILE_PHOTO_S3_REGION", "us-east-1"),
+        profile_photo_s3_endpoint=value("PROFILE_PHOTO_S3_ENDPOINT", ""),
+        notification_retention_days=int(value("AUT_11_RETENTION_DAYS", "30")),
+        notification_max_retries=int(value("NOTIFICATION_MAX_RETRIES", "3")),
         database_path=sqlite_path(value("DATABASE_URL", "sqlite:///./dev.db")),
         category_name_min_length=int(value("CAT_17_MIN_LENGTH", "2")),
         category_name_max_length=int(value("CAT_17_MAX_LENGTH", "80")),

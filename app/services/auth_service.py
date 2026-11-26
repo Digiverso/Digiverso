@@ -46,8 +46,10 @@ from app.domain.auth import (
     WeakPasswordError,
     normalizar_correo,
 )
+from app.domain.roles import permisos_para
 from app.repository.auth_repository import AuthRepository
 from app.repository.email_repository import EmailGateway
+from app.services.notifications import NotificationPublisher
 
 
 class AuthService:
@@ -64,6 +66,7 @@ class AuthService:
         session_token_manager: SessionTokenManager | None = None,
         clock: Callable[[], datetime] | None = None,
         parameters: AuthParametersProvider | None = None,
+        notifier: NotificationPublisher | None = None,
     ) -> None:
         self.repo = repo
         self.settings = settings
@@ -76,6 +79,31 @@ class AuthService:
         self.session_token_manager = session_token_manager or SessionTokenManager(settings)
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         self.parameters = parameters
+        self.notifier = notifier
+
+    def _notificar_evento(
+        self,
+        cuenta: Account,
+        tipo: str,
+        *,
+        clave_idempotencia: str,
+        contexto: dict[str, str] | None = None,
+    ) -> None:
+        """Publica un evento de cuenta; un fallo de notificación no rompe la HU."""
+
+        if self.notifier is None:
+            return
+        try:
+            self.notifier.notificar_evento(
+                cuenta_id=cuenta.id,
+                tipo=tipo,
+                contexto=contexto or {},
+                clave_idempotencia=clave_idempotencia,
+                nombre=cuenta.nombre,
+                correo=cuenta.correo,
+            )
+        except Exception:
+            pass
 
     def _parametro(self, codigo: str) -> int:
         """Lee el valor vigente (HU-06) o el estático de ``Settings``."""
@@ -177,6 +205,12 @@ class AuthService:
             ip_verificacion,
             {"resultado": AccountStatus.ACTIVA.value},
             ahora,
+        )
+        self._notificar_evento(
+            cuenta,
+            "cuenta_verificada",
+            clave_idempotencia=f"verificacion:{cuenta.id}",
+            contexto={"nombre": cuenta.nombre},
         )
 
         return ApiResponse[VerifyResponseData](
@@ -434,6 +468,12 @@ class AuthService:
             {"sesionesRevocadas": sesiones_revocadas},
             ahora,
         )
+        self._notificar_evento(
+            cuenta,
+            "password_reset",
+            clave_idempotencia=f"password_reset:{token.id}",
+            contexto={"nombre": cuenta.nombre},
+        )
         return ApiResponse[dict[str, str]](
             message="Contraseña actualizada correctamente.",
             data={"mensaje": "Ahora puedes iniciar sesión con tu nueva contraseña."},
@@ -450,6 +490,7 @@ class AuthService:
             jti=jti,
             emitido_en=ahora,
             expira_en=expira_access,
+            scopes=permisos_para(cuenta.rol),
         )
         refresh_token = self.session_token_manager.generate_refresh_token()
         refresh_hash = self.session_token_manager.hash_refresh_token(refresh_token)

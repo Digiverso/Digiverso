@@ -10,12 +10,16 @@ from fastapi.exceptions import RequestValidationError
 from starlette.responses import JSONResponse
 
 from app.api.auth_router import router as auth_router
+from app.api.dependencies import build_auth_service
 from app.api.errors import register_exception_handlers
 from app.api.v1.admin_auth_parameters import router as admin_auth_parameters_router
+from app.api.v1.admin_users import router as admin_users_router
 from app.api.v1.categories import router as categories_router
 from app.api.v1.media import router as media_router
+from app.api.v1.notifications import router as notifications_router
 from app.api.v1.products import router as products_router
 from app.api.v1.showcase import router as showcase_router
+from app.api.v1.users import router as users_router
 from app.cache.auth_parameters import InMemoryAuthParametersCache
 from app.cache.category_tree import InMemoryCategoryTreeCache
 from app.cache.showcase import InMemoryShowcaseCache
@@ -27,18 +31,22 @@ from app.repository.auth_parameters import SQLiteAuthParameterRepository
 from app.repository.categories import SQLiteCategoryRepository
 from app.repository.auth_repository import auth_repository
 from app.repository.database import Database
+from app.repository.photo_storage import build_photo_storage
 from app.repository.products import SQLiteProductRepository
 from app.services.auth_parameters import AuthParametersService
 from app.services.categories import CategoryService
 from app.services.media import MediaService
 from app.services.products import ProductService
+from app.services.profile_service import ProfileService
 
 DESCRIPTION = """
 API REST de Digiverso con arquitectura de capas.
 
 ## Módulos
 
-- **Autenticación**: registro, verificación de correo e inicio de sesión.
+- **Autenticación**: registro, verificación de correo, sesión y perfil de usuario.
+- **Roles y permisos**: asignación de roles (AUT-09) y consulta/validación de permisos.
+- **Notificaciones**: preferencias, bandeja, lectura y cola de entrega (AUT-10/AUT-11).
 - **Administración**: consulta y actualización versionada de los parámetros de autenticación.
 - **Catálogo**: árbol de categorías, ciclo de vida de productos, medios del producto y búsqueda/vitrina.
 - **Root**: estado del servicio.
@@ -62,6 +70,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             audit_repository=SQLiteAuditRepository(database),
             cache=InMemoryAuthParametersCache(),
             settings=settings,
+        )
+        auth_service = build_auth_service(
+            settings,
+            parameters=application.state.auth_parameters_service,
+        )
+        photo_storage = build_photo_storage(settings)
+        application.state.auth_service = auth_service
+        application.state.photo_storage = photo_storage
+        application.state.profile_service = ProfileService(
+            repo=auth_service.repo,
+            settings=settings,
+            photo_storage=photo_storage,
+            clock=auth_service.clock,
         )
         application.state.category_service = CategoryService(
             repository=SQLiteCategoryRepository(database),
@@ -107,6 +128,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "description": (
                     "Consulta, validación, versionamiento e historial de los parámetros "
                     "AUT-xx. Solo administradores con permiso explícito."
+                ),
+            },
+            {
+                "name": "Administración · Usuarios y roles",
+                "description": (
+                    "Asignación de roles permitidos por AUT-09 con auditoría y "
+                    "protección del último administrador."
+                ),
+            },
+            {
+                "name": "Usuarios",
+                "description": (
+                    "Consulta y edición del perfil, y consulta de permisos efectivos."
+                ),
+            },
+            {
+                "name": "Usuarios · Notificaciones",
+                "description": (
+                    "Preferencias AUT-10, bandeja con retención AUT-11 y lectura "
+                    "de notificaciones propias."
                 ),
             },
             {
@@ -165,8 +206,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
         errores = exc.errors()
-        if request.url.path.startswith(("/api/v1/auth", "/api/v1/admin/auth/")):
-            # Formato acordado en HU-01 y reutilizado por HU-06: 400 con campo/mensaje.
+        if request.url.path.startswith(
+            (
+                "/api/v1/auth",
+                "/api/v1/admin/auth/",
+                "/api/v1/admin/users",
+                "/api/v1/users",
+            )
+        ):
+            # Formato acordado en HU-01 y reutilizado por HU-03/HU-06: 400 con campo/mensaje.
             detalle = [
                 {
                     "campo": ".".join(
@@ -199,6 +247,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     application.include_router(auth_router)
     application.include_router(admin_auth_parameters_router)
+    application.include_router(admin_users_router)
+    application.include_router(users_router)
+    application.include_router(notifications_router)
     application.include_router(categories_router)
     application.include_router(products_router)
     application.include_router(media_router)
