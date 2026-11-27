@@ -16,6 +16,7 @@ from app.api.v1.admin_auth_parameters import router as admin_auth_parameters_rou
 from app.api.v1.admin_catalog_parameters import router as admin_catalog_parameters_router
 from app.api.v1.admin_users import router as admin_users_router
 from app.api.v1.categories import router as categories_router
+from app.api.v1.commerce import router as commerce_router
 from app.api.v1.media import router as media_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.products import router as products_router
@@ -36,6 +37,7 @@ from app.repository.events import InMemoryEventBus
 from app.repository.notifications import notification_repository
 from app.repository.categories import SQLiteCategoryRepository
 from app.repository.auth_repository import auth_repository
+from app.repository.commerce import SQLiteCommerceRepository
 # Se importa después de las líneas compartidas para no colisionar con HU-11/HU-12.
 from app.repository.catalog_parameters import SQLiteCatalogParameterRepository
 from app.repository.database import Database
@@ -44,6 +46,7 @@ from app.repository.products import SQLiteProductRepository
 from app.services.auth_parameters import AuthParametersService
 from app.services.catalog_parameters import CatalogParametersService
 from app.services.categories import CategoryService
+from app.services.commerce import CommerceService
 from app.services.media import MediaService
 from app.services.notifications import NotificationService
 from app.services.products import ProductService
@@ -60,6 +63,7 @@ API REST de Digiverso con arquitectura de capas.
 - **Notificaciones**: preferencias, bandeja, lectura y cola de entrega (AUT-10/AUT-11).
 - **Administración**: consulta y actualización versionada de los parámetros de autenticación.
 - **Catálogo**: árbol de categorías, ciclo de vida de productos, medios del producto, búsqueda/vitrina y control de publicaciones (HU-11).
+- **Comercio**: licencias de uso, descargas con URL firmada e historial de compras (HU-15).
 - **Root**: estado del servicio.
 
 Todas las respuestas usan el sobre `message`, `data` y `success`.
@@ -154,6 +158,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             clock=auth_service.clock,
             showcase_cache=application.state.product_service.showcase_cache,
         )
+        application.state.commerce_service = CommerceService(
+            repository=SQLiteCommerceRepository(database),
+            product_repository=product_repository,
+            audit_repository=audit_repository,
+            settings=settings,
+            clock=auth_service.clock,
+        )
         yield
 
     application = FastAPI(
@@ -220,6 +231,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             {
                 "name": "Catálogo · Control de publicaciones",
                 "description": "Cola de revisión, aprobación y rechazo con evidencia, evento y notificación.",
+            },
+            {
+                "name": "Comercio · Licencias, descargas e historial",
+                "description": (
+                    "Licencias de uso, descargas con URL firmada (COM-08/COM-09) "
+                    "e historial paginado de compras."
+                ),
             },
             {
                 "name": "Root",
@@ -311,6 +329,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(media_router)
     application.include_router(showcase_router)
     application.include_router(publication_control_router)
+    application.include_router(commerce_router)
 
     @application.get(
         "/",

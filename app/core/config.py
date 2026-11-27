@@ -159,6 +159,15 @@ class Settings:
     media_storage_dir: Path = Path("uploads/media")
     media_url_base: str = "https://cdn.digiverso.com/products"
 
+    # Comercio · licencias y descargas (HU-15). COM-08 y COM-09 no tenían valor
+    # normativo en el repositorio: se fijan aquí y se sobreescriben desde .env.
+    commerce_download_ttl_minutes: int = 10  # COM-08
+    commerce_max_downloads: int = 3  # COM-09
+    commerce_download_signing_secret: str = ""
+    commerce_storage_base_url: str = "https://storage.digiverso.test/productos"
+    commerce_default_page_size: int = 20
+    commerce_max_page_size: int = 100
+
     @property
     def media_max_read_bytes(self) -> int:
         """Tope de lectura del cuerpo: basta para detectar CAT-06/CAT-08."""
@@ -273,6 +282,18 @@ def load_settings() -> Settings:
         media_url_base=value(
             "MEDIA_URL_BASE", "https://cdn.digiverso.com/products"
         ).rstrip("/"),
+        commerce_download_ttl_minutes=int(
+            value("COM_08_DOWNLOAD_TTL_MINUTES", "10")
+        ),
+        commerce_max_downloads=int(value("COM_09_MAX_DOWNLOADS", "3")),
+        commerce_download_signing_secret=value(
+            "COMMERCE_DOWNLOAD_SIGNING_SECRET", ""
+        ),
+        commerce_storage_base_url=value(
+            "COMMERCE_STORAGE_BASE_URL", "https://storage.digiverso.test/productos"
+        ).rstrip("/"),
+        commerce_default_page_size=int(value("COMMERCE_DEFAULT_PAGE_SIZE", "20")),
+        commerce_max_page_size=int(value("COMMERCE_MAX_PAGE_SIZE", "100")),
     )
 
 
