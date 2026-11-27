@@ -30,6 +30,7 @@ class NotificationType(StrEnum):
     CUENTA_VERIFICADA = "cuenta_verificada"
     PERFIL_ACTUALIZADO = "perfil_actualizado"
     PRODUCTO_PUBLICADO = "producto_publicado"
+    PRODUCTO_RECHAZADO = "producto_rechazado"
     NUEVO_SEGUIDOR = "nuevo_seguidor"
     NUEVA_RESENA = "nueva_resena"
     PASSWORD_RESET = "password_reset"
@@ -65,6 +66,7 @@ MENSAJES_BASE: dict[NotificationType, str] = {
     NotificationType.CUENTA_VERIFICADA: "Tu cuenta fue verificada.",
     NotificationType.PERFIL_ACTUALIZADO: "Tu perfil fue actualizado.",
     NotificationType.PRODUCTO_PUBLICADO: "Tu producto fue publicado.",
+    NotificationType.PRODUCTO_RECHAZADO: "Tu producto fue rechazado.",
     NotificationType.NUEVO_SEGUIDOR: "Tienes un nuevo seguidor.",
     NotificationType.NUEVA_RESENA: "Recibiste una nueva reseña.",
     NotificationType.PASSWORD_RESET: "Tu contraseña fue restablecida.",
@@ -146,6 +148,11 @@ class NotificationTemplate:
             if clave in {"nombre", "detalle"}
         }
         mensaje = base.format(**seguro) if seguro else base
+        # HU-11: las decisiones de revisión incluyen la decisión, el motivo
+        # CAT-14 y la observación en el texto de la notificación.
+        detalle = seguro.get("detalle", "").strip()
+        if detalle:
+            mensaje = f"{mensaje} {detalle}"
         if self.canal is NotificationChannel.EMAIL:
             nombre = seguro.get("nombre", "")
             prefijo = f"Hola {nombre}: " if nombre else ""

@@ -498,3 +498,99 @@ class NotificationListData(BaseModel):
 class NotificationReadData(BaseModel):
     id: str
     leida: bool
+
+
+# ------------------------------------------------------------ HU-11 (SUB-13)
+class ApproveReviewRequest(BaseModel):
+    """Checklist de FUN-33; se valida en el dominio (las cinco casillas)."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    checklist: dict[str, bool] | list[str] | None = None
+
+
+class RejectReviewRequest(BaseModel):
+    """Motivo CAT-14 y observación obligatorios; validados en el dominio."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    motivo: str | None = None
+    observacion: str | None = None
+
+
+class ReviewPolicyItem(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    codigo: str
+    descripcion: str
+
+
+class ReviewAuthor(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    nombre: str
+
+
+class ReviewQueueItem(BaseModel):
+    """Expediente completo que el administrador revisa en la cola."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    producto: ProductResponse
+    autor: ReviewAuthor
+    fecha_envio: datetime = Field(alias="fechaEnvio")
+    medios: list[MedioResponse]
+    politicas_aplicables: list[ReviewPolicyItem] = Field(alias="politicasAplicables")
+
+    @classmethod
+    def from_entry(
+        cls, entry, *, politicas: list[dict[str, str]]
+    ) -> ReviewQueueItem:
+        product = entry.producto
+        return cls(
+            producto=ProductResponse.from_product(product, incluir_privados=True),
+            autor=ReviewAuthor(id=product.autor_id, nombre=product.autor_nombre),
+            fecha_envio=entry.fecha_envio,
+            medios=[
+                MedioResponse(
+                    id=medio.id,
+                    tipo=medio.tipo,
+                    url=medio.url,
+                    orden=medio.orden,
+                    estado=medio.estado,
+                )
+                for medio in sorted(product.medios, key=lambda item: item.orden)
+            ],
+            politicas_aplicables=[
+                ReviewPolicyItem(**politica) for politica in politicas
+            ],
+        )
+
+
+class ReviewQueueData(BaseModel):
+    items: list[ReviewQueueItem]
+    total: int
+
+
+class ApprovalData(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    producto_id: str = Field(alias="productoId")
+    estado: str
+    fecha_publicacion: datetime = Field(alias="fechaPublicacion")
+    notificado: bool
+
+
+class RejectionData(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    producto_id: str = Field(alias="productoId")
+    estado: str
+    motivo: str
+    observacion: str
+
+
+ReviewQueueItem.model_rebuild()
+ApprovalData.model_rebuild()
+RejectionData.model_rebuild()

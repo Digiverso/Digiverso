@@ -15,7 +15,13 @@ from app.domain.catalog_search import (
     relevance_score,
     text_matches,
 )
-from app.domain.product import ESTADO_PUBLICADO, MEDIO_ACTIVO, Medio, Product
+from app.domain.product import (
+    ESTADO_EN_REVISION,
+    ESTADO_PUBLICADO,
+    MEDIO_ACTIVO,
+    Medio,
+    Product,
+)
 from app.repository.database import Database
 
 
@@ -189,6 +195,24 @@ class SQLiteProductRepository:
             rows = connection.execute(
                 "SELECT * FROM productos WHERE estado = ? ORDER BY creado_en DESC, id DESC",
                 (estado,),
+            ).fetchall()
+        return self._rows_to_products(rows)
+
+    def list_review_queue(self) -> list[Product]:
+        """Cola HU-11: solo ``en_revision``, del más antiguo al más reciente.
+
+        ``estado_desde`` es la fecha de envío a revisión registrada por FUN-23;
+        se usa como criterio de antigüedad y el ``id`` desempata de forma estable.
+        """
+
+        with self.database.connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM productos
+                WHERE estado = ?
+                ORDER BY estado_desde ASC, id ASC
+                """,
+                (ESTADO_EN_REVISION,),
             ).fetchall()
         return self._rows_to_products(rows)
 
