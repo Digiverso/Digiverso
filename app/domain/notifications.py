@@ -37,6 +37,7 @@ class NotificationType(StrEnum):
     CUENTA_BLOQUEADA = "cuenta_bloqueada"
     ROL_ASIGNADO = "rol_asignado"
     LOGIN_SOSPECHOSO = "login_sospechoso"
+    VENTA_REGISTRADA = "venta_registrada"
 
 
 CANALES_PERMITIDOS: tuple[NotificationChannel, ...] = tuple(NotificationChannel)
@@ -73,6 +74,7 @@ MENSAJES_BASE: dict[NotificationType, str] = {
     NotificationType.CUENTA_BLOQUEADA: "Tu cuenta fue bloqueada temporalmente.",
     NotificationType.ROL_ASIGNADO: "Se actualizó el rol de tu cuenta.",
     NotificationType.LOGIN_SOSPECHOSO: "Detectamos un acceso inusual a tu cuenta.",
+    NotificationType.VENTA_REGISTRADA: "Registraste una nueva venta.",
 }
 
 
@@ -145,7 +147,7 @@ class NotificationTemplate:
         seguro = {
             clave: str(valor)
             for clave, valor in (contexto or {}).items()
-            if clave in {"nombre", "detalle"}
+            if clave in {"nombre", "detalle", "producto", "monto_neto", "fecha"}
         }
         mensaje = base.format(**seguro) if seguro else base
         # HU-11: las decisiones de revisión incluyen la decisión, el motivo
@@ -153,6 +155,14 @@ class NotificationTemplate:
         detalle = seguro.get("detalle", "").strip()
         if detalle:
             mensaje = f"{mensaje} {detalle}"
+        if self.tipo is NotificationType.VENTA_REGISTRADA:
+            producto = seguro.get("producto", "Producto")
+            monto_neto = seguro.get("monto_neto", "0")
+            fecha = seguro.get("fecha", "")
+            mensaje = (
+                f"Registraste una venta de {producto}. "
+                f"Monto neto: {monto_neto} COP. Fecha: {fecha}."
+            )
         if self.canal is NotificationChannel.EMAIL:
             nombre = seguro.get("nombre", "")
             prefijo = f"Hola {nombre}: " if nombre else ""
