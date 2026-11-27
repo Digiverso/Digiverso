@@ -14,6 +14,9 @@ from app.api.dependencies import build_auth_service
 from app.api.errors import register_exception_handlers
 from app.api.v1.admin_auth_parameters import router as admin_auth_parameters_router
 from app.api.v1.admin_catalog_parameters import router as admin_catalog_parameters_router
+from app.api.v1.admin_commerce_parameters import (
+    router as admin_commerce_parameters_router,
+)
 from app.api.v1.admin_users import router as admin_users_router
 from app.api.v1.categories import router as categories_router
 from app.api.v1.media import router as media_router
@@ -25,12 +28,14 @@ from app.api.v1.users import router as users_router
 from app.cache.auth_parameters import InMemoryAuthParametersCache
 from app.cache.catalog_parameters import InMemoryCatalogParametersCache
 from app.cache.category_tree import InMemoryCategoryTreeCache
+from app.cache.commerce_parameters import InMemoryCommerceParametersCache
 from app.cache.showcase import InMemoryShowcaseCache
 from app.core.config import Settings, get_settings, settings as default_settings
 from app.core.responses import ApiResponse, ok
 from app.domain.exceptions import CatalogError
 from app.repository.audit import SQLiteAuditRepository
 from app.repository.auth_parameters import SQLiteAuthParameterRepository
+from app.repository.commerce_parameters import SQLiteCommerceParameterRepository
 from app.repository.email_repository import build_notification_sender
 from app.repository.events import InMemoryEventBus
 from app.repository.notifications import notification_repository
@@ -44,6 +49,7 @@ from app.repository.products import SQLiteProductRepository
 from app.services.auth_parameters import AuthParametersService
 from app.services.catalog_parameters import CatalogParametersService
 from app.services.categories import CategoryService
+from app.services.commerce_parameters import CommerceParametersService
 from app.services.media import MediaService
 from app.services.notifications import NotificationService
 from app.services.products import ProductService
@@ -60,6 +66,7 @@ API REST de Digiverso con arquitectura de capas.
 - **Notificaciones**: preferencias, bandeja, lectura y cola de entrega (AUT-10/AUT-11).
 - **Administración**: consulta y actualización versionada de los parámetros de autenticación.
 - **Catálogo**: árbol de categorías, ciclo de vida de productos, medios del producto, búsqueda/vitrina y control de publicaciones (HU-11).
+- **Comercio**: consulta y actualización versionada de los parámetros de comisión, pagos y liquidaciones (HU-17).
 - **Root**: estado del servicio.
 
 Todas las respuestas usan el sobre `message`, `data` y `success`.
@@ -90,11 +97,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             cache=InMemoryCatalogParametersCache(),
             settings=settings,
         )
-        # Los consumidores del catálogo releen los parámetros vigentes en cada
-        # operación a través de esta vista de Settings (HU-13). Se reasigna la
-        # variable local para que todos los servicios creados después (incluidos
-        # los de otras historias) reciban la misma vista sin tocar sus líneas.
-        settings = application.state.catalog_parameters_service.settings_view
+        # HU-17: la vista de comercio se encadena con la del catálogo para que
+        # ningún módulo pierda sus parámetros vigentes. Se crea con la vista de
+        # catálogo como base y se reasigna la variable local antes de construir
+        # el resto de servicios.
+        application.state.commerce_parameters_service = CommerceParametersService(
+            repository=SQLiteCommerceParameterRepository(database),
+            audit_repository=SQLiteAuditRepository(database),
+            cache=InMemoryCommerceParametersCache(),
+            settings=application.state.catalog_parameters_service.settings_view,
+        )
+        # Los consumidores del catálogo y de comercio releen los parámetros
+        # vigentes en cada operación a través de esta vista de Settings
+        # (HU-13/HU-17). Se reasigna la variable local para que todos los
+        # servicios creados después reciban la misma vista sin tocar sus líneas.
+        settings = application.state.commerce_parameters_service.settings_view
         application.state.settings = settings
         auth_service = build_auth_service(
             settings,
@@ -182,6 +199,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 ),
             },
             {
+                "name": "Administración · Parámetros de comercio",
+                "description": (
+                    "Consulta, validación, versionamiento e historial de los parámetros "
+                    "COM-xx. Solo administradores con permiso explícito."
+                ),
+            },
+            {
                 "name": "Administración · Usuarios y roles",
                 "description": (
                     "Asignación de roles permitidos por AUT-09 con auditoría y "
@@ -265,6 +289,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             (
                 "/api/v1/auth",
                 "/api/v1/admin/auth/",
+                "/api/v1/admin/commerce/parameters",
                 "/api/v1/admin/users",
                 "/api/v1/users",
             )
@@ -303,6 +328,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(auth_router)
     application.include_router(admin_auth_parameters_router)
     application.include_router(admin_catalog_parameters_router)
+    application.include_router(admin_commerce_parameters_router)
     application.include_router(admin_users_router)
     application.include_router(users_router)
     application.include_router(notifications_router)
