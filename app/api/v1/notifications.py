@@ -113,3 +113,10 @@ def marcar_como_leida(
         "Notificación marcada como leída.",
         NotificationReadData(id=notificacion.id, leida=notificacion.leida),
     )
+
+
+# HU-20: el router de comunidad se engancha aquí para no tocar el bloque de
+# importaciones ni el lifespan de app/main.py, compartidos con HU-18/HU-19.
+from app.api.v1.community_notifications import router as community_notifications_router
+
+router.include_router(community_notifications_router)

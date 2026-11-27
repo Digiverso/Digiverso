@@ -56,6 +56,9 @@ Los canales y tipos se validan contra AUT-10; la bandeja aplica retención AUT-1
 (30 días por defecto). Las notificaciones críticas de seguridad no se silencian.
 Documentación funcional:
 [`docs/HU-05_notificaciones_y_preferencias.md`](docs/HU-05_notificaciones_y_preferencias.md).
+Las interacciones de comunidad (HU-20/FUN-63) usan la misma bandeja y se
+consultan en `GET /api/v1/users/me/notifications/comunidad`; ver
+[`docs/HU-20_notificaciones_de_comunidad.md`](docs/HU-20_notificaciones_de_comunidad.md).
 
 ## Endpoints de parámetros de autenticación
 
