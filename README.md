@@ -6,7 +6,8 @@ y parametrización HU-06/FUN-16), **Catálogo · Categorías**
 (HU-07, FUN-17 a FUN-20), **Catálogo · Productos** (HU-08, FUN-21 a FUN-25),
 **Catálogo · Medios del producto** (HU-09, FUN-26 y FUN-27),
 **Catálogo · Búsqueda, vitrina y detalle** (HU-10, FUN-28 a FUN-31) y
-**Catálogo · Control de publicaciones** (HU-11, FUN-32 a FUN-34 y FUN-38).
+**Catálogo · Control de publicaciones** (HU-11, FUN-32 a FUN-34 y FUN-38) y
+**Comercio · Licencia, descarga e historial** (HU-15, FUN-44 a FUN-47).
 
 ## Instalación y ejecución
 
@@ -130,5 +131,21 @@ Solo administradores; un administrador no puede revisar sus propios productos.
 Cada decisión queda auditada con evidencia y publica el evento `product.reviewed`,
 además de notificar al productor (FUN-38). Documentación funcional:
 [`docs/HU-11_control_de_publicaciones.md`](docs/HU-11_control_de_publicaciones.md).
+
+## Endpoints de licencias, descargas e historial
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/api/v1/commerce/licenses/{id}` | Consultar licencia propia (200/401/403/404) |
+| `GET` | `/api/v1/commerce/purchases/{id}/download` | Autorizar descarga con licencia activa (200/403/404) |
+| `GET` | `/api/v1/commerce/purchases?pagina=&tamanioPagina=` | Historial paginado y ordenado por fecha (200/400/401) |
+| `GET` | `/api/v1/commerce/downloads/{token}` | Validar URL firmada y redirigir a S3 (307/403/410) |
+
+Requieren comprador autenticado con `Authorization: Bearer <token>` o las
+cabeceras `X-Actor-Id` / `X-Actor-Roles` (401 si no hay actor). La URL firmada
+vence en COM-08 minutos (`COM_08_DOWNLOAD_TTL_MINUTES`, 10 por defecto) y el
+límite de descargas es COM-09 (`COM_09_MAX_DOWNLOADS`, 3 por defecto). Las
+descargas se auditan con usuario, producto e IP. Documentación funcional:
+[`docs/HU-15_licencia_descarga_e_historial.md`](docs/HU-15_licencia_descarga_e_historial.md).
 
 Todas las respuestas usan el sobre `{ "message", "data", "success" }`.

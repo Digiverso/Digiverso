@@ -73,6 +73,40 @@ CREATE TABLE IF NOT EXISTS licencias (
 
 CREATE INDEX IF NOT EXISTS idx_licencias_producto ON licencias(producto_id);
 
+-- Comercio (HU-15): compras acreditadas por pago y control de descargas.
+-- HU-14 reutilizará ``compras`` como historial de órdenes confirmadas; el
+-- archivo se congela en la compra para que el archivado del producto (HU-08)
+-- no retire el acceso a una licencia vigente.
+CREATE TABLE IF NOT EXISTS compras (
+    id             TEXT PRIMARY KEY,
+    producto_id    TEXT NOT NULL REFERENCES productos(id),
+    comprador_id   TEXT NOT NULL,
+    estado         TEXT NOT NULL DEFAULT 'pendiente'
+        CHECK (estado IN ('pendiente', 'pagada', 'cancelada')),
+    fecha_creacion TEXT NOT NULL,
+    fecha_pago     TEXT,
+    licencia_id    TEXT REFERENCES licencias(id),
+    precio         INTEGER NOT NULL DEFAULT 0,
+    moneda         TEXT NOT NULL DEFAULT 'COP',
+    archivo_clave  TEXT NOT NULL DEFAULT '',
+    nombre_archivo TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_compras_comprador
+    ON compras(comprador_id, fecha_pago DESC, id DESC);
+
+CREATE TABLE IF NOT EXISTS descargas (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    compra_id   TEXT NOT NULL REFERENCES compras(id),
+    licencia_id TEXT NOT NULL REFERENCES licencias(id),
+    producto_id TEXT NOT NULL REFERENCES productos(id),
+    actor_id    TEXT NOT NULL,
+    ip          TEXT NOT NULL,
+    fecha       TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_descargas_licencia ON descargas(licencia_id);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     entidad     TEXT NOT NULL,
