@@ -133,7 +133,7 @@ class ProductService:
             "nombre": limpio_nombre,
             "descripcion": limpia_descripcion,
             "precio": limpio_precio,
-            "moneda": MONEDA_POR_DEFECTO,
+            "moneda": str(moneda).strip().upper() or self.settings.product_currency,
             "edad_minima": edad_minima_limpia,
             "edad_maxima": edad_maxima_limpia,
             "categorias": limpias_categorias,

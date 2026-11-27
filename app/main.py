@@ -13,6 +13,7 @@ from app.api.auth_router import router as auth_router
 from app.api.dependencies import build_auth_service
 from app.api.errors import register_exception_handlers
 from app.api.v1.admin_auth_parameters import router as admin_auth_parameters_router
+from app.api.v1.admin_catalog_parameters import router as admin_catalog_parameters_router
 from app.api.v1.admin_users import router as admin_users_router
 from app.api.v1.categories import router as categories_router
 from app.api.v1.media import router as media_router
@@ -22,6 +23,7 @@ from app.api.v1.publication_control import router as publication_control_router
 from app.api.v1.showcase import router as showcase_router
 from app.api.v1.users import router as users_router
 from app.cache.auth_parameters import InMemoryAuthParametersCache
+from app.cache.catalog_parameters import InMemoryCatalogParametersCache
 from app.cache.category_tree import InMemoryCategoryTreeCache
 from app.cache.showcase import InMemoryShowcaseCache
 from app.core.config import Settings, get_settings, settings as default_settings
@@ -34,10 +36,13 @@ from app.repository.events import InMemoryEventBus
 from app.repository.notifications import notification_repository
 from app.repository.categories import SQLiteCategoryRepository
 from app.repository.auth_repository import auth_repository
+# Se importa después de las líneas compartidas para no colisionar con HU-11/HU-12.
+from app.repository.catalog_parameters import SQLiteCatalogParameterRepository
 from app.repository.database import Database
 from app.repository.photo_storage import build_photo_storage
 from app.repository.products import SQLiteProductRepository
 from app.services.auth_parameters import AuthParametersService
+from app.services.catalog_parameters import CatalogParametersService
 from app.services.categories import CategoryService
 from app.services.media import MediaService
 from app.services.notifications import NotificationService
@@ -68,6 +73,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
+        # HU-13: ``settings`` pasa a ser la vista que relee los parámetros CAT.
+        nonlocal settings
         database = Database(settings.database_path)
         application.state.settings = settings
         application.state.database = database
@@ -77,6 +84,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             cache=InMemoryAuthParametersCache(),
             settings=settings,
         )
+        application.state.catalog_parameters_service = CatalogParametersService(
+            repository=SQLiteCatalogParameterRepository(database),
+            audit_repository=SQLiteAuditRepository(database),
+            cache=InMemoryCatalogParametersCache(),
+            settings=settings,
+        )
+        # Los consumidores del catálogo releen los parámetros vigentes en cada
+        # operación a través de esta vista de Settings (HU-13). Se reasigna la
+        # variable local para que todos los servicios creados después (incluidos
+        # los de otras historias) reciban la misma vista sin tocar sus líneas.
+        settings = application.state.catalog_parameters_service.settings_view
+        application.state.settings = settings
         auth_service = build_auth_service(
             settings,
             parameters=application.state.auth_parameters_service,
@@ -153,6 +172,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "description": (
                     "Consulta, validación, versionamiento e historial de los parámetros "
                     "AUT-xx. Solo administradores con permiso explícito."
+                ),
+            },
+            {
+                "name": "Administración · Parámetros del catálogo",
+                "description": (
+                    "Consulta, validación, versionamiento e historial de los parámetros "
+                    "CAT-xx. Solo administradores con permiso explícito."
                 ),
             },
             {
@@ -276,6 +302,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     application.include_router(auth_router)
     application.include_router(admin_auth_parameters_router)
+    application.include_router(admin_catalog_parameters_router)
     application.include_router(admin_users_router)
     application.include_router(users_router)
     application.include_router(notifications_router)

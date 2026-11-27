@@ -6,7 +6,6 @@ from fastapi import APIRouter, Depends, File, Request, Response, UploadFile, sta
 
 from app.api.deps import get_actor, get_media_service
 from app.api.schemas import MediaDeleteResponse, MediaUploadResponse, MedioResponse
-from app.core.config import Settings
 from app.core.responses import ApiResponse, ok
 from app.domain.actor import Actor
 from app.domain.exceptions import MediaFileRequiredError
@@ -55,7 +54,7 @@ async def upload_media(
             details={"campo": "archivo"},
         )
 
-    settings: Settings = request.app.state.settings
+    settings = service.settings
     contenido = await seleccionado.read(settings.media_max_read_bytes)
     medio = service.upload(
         product_id,
