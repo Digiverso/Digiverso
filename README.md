@@ -132,3 +132,16 @@ además de notificar al productor (FUN-38). Documentación funcional:
 [`docs/HU-11_control_de_publicaciones.md`](docs/HU-11_control_de_publicaciones.md).
 
 Todas las respuestas usan el sobre `{ "message", "data", "success" }`.
+
+## Comunidad · Seguimiento y feed
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `POST` | `/api/v1/community/users/{id}/follow` | Seguir usuario (201/400/404/409) |
+| `DELETE` | `/api/v1/community/users/{id}/follow` | Dejar de seguir usuario y actualizar contadores (200/404) |
+| `GET` | `/api/v1/community/feed/following` | Feed paginado de seguidos (200/422) |
+| `PUT` | `/api/v1/community/me/interests` | Configurar intereses (200/400/409) |
+| `GET` | `/api/v1/community/feed/recommended` | Recomendar publicados, sin comprados ni propios (200) |
+
+Documentación funcional:
+[`docs/HU-19_seguimiento_feed_intereses_y_recomendaciones.md`](docs/HU-19_seguimiento_feed_intereses_y_recomendaciones.md).

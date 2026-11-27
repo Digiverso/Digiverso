@@ -10,9 +10,14 @@ from app.domain.actor import ADMIN_ROLE, Actor
 from app.domain.exceptions import ForbiddenError
 from app.services.auth_parameters import AuthParametersService
 from app.services.categories import CategoryService
+from app.services.community import CommunityService
 from app.services.media import MediaService
 from app.services.products import ProductService
 from app.services.publication_control import PublicationControlService
+
+
+def get_community_service(request: Request) -> CommunityService:
+    return request.app.state.community_service
 
 
 def get_auth_parameters_service(request: Request) -> AuthParametersService:

@@ -50,12 +50,21 @@ from app.services.products import ProductService
 from app.services.publication_control import PublicationControlService
 from app.services.profile_service import ProfileService
 
+# HU-19: se agrupan al final para no solapar las importaciones que añaden
+# otras historias (HU-11/HU-12/HU-13/HU-18) en los mismos bloques.
+from app.api.v1.community import router as community_router
+from app.cache.community_feed import InMemoryCommunityFeedCache
+from app.domain.community import CommunitySettings
+from app.repository.community import SQLiteCommunityRepository
+from app.services.community import CommunityService
+
 DESCRIPTION = """
 API REST de Digiverso con arquitectura de capas.
 
 ## Módulos
 
 - **Autenticación**: registro, verificación de correo, sesión y perfil de usuario.
+- **Comunidad**: seguimiento, feed de seguidos, intereses y recomendaciones.
 - **Roles y permisos**: asignación de roles (AUT-09) y consulta/validación de permisos.
 - **Notificaciones**: preferencias, bandeja, lectura y cola de entrega (AUT-10/AUT-11).
 - **Administración**: consulta y actualización versionada de los parámetros de autenticación.
@@ -116,6 +125,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             settings=settings,
         )
         product_repository = SQLiteProductRepository(database)
+        # HU-19 se inicializa aquí, lejos del bloque de medios que otras
+        # historias insertan justo antes de ``yield``.
+        application.state.community_settings = CommunitySettings.from_env()
+        application.state.community_feed_cache = InMemoryCommunityFeedCache()
+        application.state.community_service = CommunityService(
+            repository=SQLiteCommunityRepository(database),
+            product_repository=product_repository,
+            category_repository=SQLiteCategoryRepository(database),
+            account_provider=auth_repository.obtener_cuenta_por_id,
+            cache=application.state.community_feed_cache,
+            settings=application.state.community_settings,
+        )
         audit_repository = SQLiteAuditRepository(database)
         application.state.product_service = ProductService(
             repository=product_repository,
@@ -192,6 +213,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "name": "Usuarios",
                 "description": (
                     "Consulta y edición del perfil, y consulta de permisos efectivos."
+                ),
+            },
+            {
+                "name": "Comunidad · Seguimiento y feed",
+                "description": (
+                    "Seguir/dejar de seguir, feed de seguidos, intereses y "
+                    "recomendaciones (HU-19)."
                 ),
             },
             {
@@ -301,6 +329,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     application.include_router(auth_router)
+    application.include_router(community_router)
     application.include_router(admin_auth_parameters_router)
     application.include_router(admin_catalog_parameters_router)
     application.include_router(admin_users_router)
