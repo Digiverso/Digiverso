@@ -70,6 +70,19 @@ Requieren rol `administrador` o el alcance `admin.auth.parameters.write`.
 Documentación funcional:
 [`docs/HU-06_parametrizacion_de_autenticacion.md`](docs/HU-06_parametrizacion_de_autenticacion.md).
 
+## Endpoints de parámetros de comunidad
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/api/v1/admin/community/parameters` | Parámetros vigentes, versión y validaciones (200) |
+| `PUT` | `/api/v1/admin/community/parameters` | Validar y guardar una nueva versión (200/400/403) |
+| `GET` | `/api/v1/admin/community/parameters/history` | Historial de versiones inmutables (200) |
+| `GET` | `/api/v1/admin/community/parameters/history/{version}` | Detalle de una versión (200/404) |
+
+Requieren rol `administrador` o el alcance `admin.community.parameters.write`.
+Documentación funcional:
+[`docs/HU-21_parametrizacion_de_comunidad.md`](docs/HU-21_parametrizacion_de_comunidad.md).
+
 ## Endpoints de categorías
 
 | Método | Ruta | Descripción |

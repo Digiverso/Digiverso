@@ -14,6 +14,7 @@ from app.api.dependencies import build_auth_service
 from app.api.errors import register_exception_handlers
 from app.api.v1.admin_auth_parameters import router as admin_auth_parameters_router
 from app.api.v1.admin_catalog_parameters import router as admin_catalog_parameters_router
+from app.api.v1.admin_community_parameters import router as admin_community_parameters_router
 from app.api.v1.admin_users import router as admin_users_router
 from app.api.v1.categories import router as categories_router
 from app.api.v1.media import router as media_router
@@ -25,6 +26,7 @@ from app.api.v1.users import router as users_router
 from app.cache.auth_parameters import InMemoryAuthParametersCache
 from app.cache.catalog_parameters import InMemoryCatalogParametersCache
 from app.cache.category_tree import InMemoryCategoryTreeCache
+from app.cache.community_parameters import InMemoryCommunityParametersCache
 from app.cache.showcase import InMemoryShowcaseCache
 from app.core.config import Settings, get_settings, settings as default_settings
 from app.core.responses import ApiResponse, ok
@@ -38,12 +40,17 @@ from app.repository.categories import SQLiteCategoryRepository
 from app.repository.auth_repository import auth_repository
 # Se importa después de las líneas compartidas para no colisionar con HU-11/HU-12.
 from app.repository.catalog_parameters import SQLiteCatalogParameterRepository
+from app.repository.community_parameters import SQLiteCommunityParameterRepository
 from app.repository.database import Database
 from app.repository.photo_storage import build_photo_storage
 from app.repository.products import SQLiteProductRepository
 from app.services.auth_parameters import AuthParametersService
 from app.services.catalog_parameters import CatalogParametersService
 from app.services.categories import CategoryService
+from app.services.community_parameters import (
+    CommunityParametersService,
+    bind_community_consumers,
+)
 from app.services.media import MediaService
 from app.services.notifications import NotificationService
 from app.services.products import ProductService
@@ -60,6 +67,7 @@ API REST de Digiverso con arquitectura de capas.
 - **Notificaciones**: preferencias, bandeja, lectura y cola de entrega (AUT-10/AUT-11).
 - **Administración**: consulta y actualización versionada de los parámetros de autenticación.
 - **Catálogo**: árbol de categorías, ciclo de vida de productos, medios del producto, búsqueda/vitrina y control de publicaciones (HU-11).
+- **Comunidad**: parametrización versionada de reseñas, seguimiento, feed y recomendaciones (HU-21).
 - **Root**: estado del servicio.
 
 Todas las respuestas usan el sobre `message`, `data` y `success`.
@@ -96,6 +104,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # los de otras historias) reciban la misma vista sin tocar sus líneas.
         settings = application.state.catalog_parameters_service.settings_view
         application.state.settings = settings
+        # HU-21: parametrización de comunidad. No reemplaza ``settings``: los
+        # parámetros COMU se propagan a los consumidores al final del lifespan.
+        application.state.community_parameters_service = CommunityParametersService(
+            repository=SQLiteCommunityParameterRepository(database),
+            audit_repository=SQLiteAuditRepository(database),
+            cache=InMemoryCommunityParametersCache(),
+            settings=settings,
+        )
         auth_service = build_auth_service(
             settings,
             parameters=application.state.auth_parameters_service,
@@ -154,6 +170,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             clock=auth_service.clock,
             showcase_cache=application.state.product_service.showcase_cache,
         )
+        # HU-21: los servicios de comunidad pueden crearse en otras ramas; si
+        # están presentes, sus ajustes y cachés se enlazan aquí sin importarlos.
+        bind_community_consumers(
+            application, application.state.community_parameters_service
+        )
         yield
 
     application = FastAPI(
@@ -179,6 +200,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "description": (
                     "Consulta, validación, versionamiento e historial de los parámetros "
                     "CAT-xx. Solo administradores con permiso explícito."
+                ),
+            },
+            {
+                "name": "Administración · Parámetros de comunidad",
+                "description": (
+                    "Consulta, validación, versionamiento e historial de los parámetros "
+                    "COMU-xx. Solo administradores con permiso explícito."
                 ),
             },
             {
@@ -265,6 +293,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             (
                 "/api/v1/auth",
                 "/api/v1/admin/auth/",
+                "/api/v1/admin/community/",
                 "/api/v1/admin/users",
                 "/api/v1/users",
             )
@@ -303,6 +332,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(auth_router)
     application.include_router(admin_auth_parameters_router)
     application.include_router(admin_catalog_parameters_router)
+    application.include_router(admin_community_parameters_router)
     application.include_router(admin_users_router)
     application.include_router(users_router)
     application.include_router(notifications_router)
