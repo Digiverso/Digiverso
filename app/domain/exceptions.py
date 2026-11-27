@@ -150,3 +150,70 @@ class ReviewForbiddenError(ForbiddenError):
     """El actor no es administrador o revisa un producto de su autoría."""
 
     code = "REVIEW_FORBIDDEN"
+
+
+# ------------------------------------------------------------------ HU-15
+class ConsumerRequiredError(CatalogError):
+    """La operación de Comercio requiere un comprador autenticado."""
+
+    status_code = 401
+    code = "CONSUMER_REQUIRED"
+
+
+# ------------------------------------------------------------------ HU-16
+class SalesForbiddenError(ForbiddenError):
+    """El actor no tiene permisos para consultar ventas o liquidaciones."""
+
+    code = "SALES_FORBIDDEN"
+
+
+class LicenseNotFoundError(CatalogError):
+    status_code = 404
+    code = "LICENSE_NOT_FOUND"
+
+
+class PurchaseNotFoundError(CatalogError):
+    status_code = 404
+    code = "PURCHASE_NOT_FOUND"
+
+
+class LicenseForbiddenError(ForbiddenError):
+    """La licencia o compra pertenece a otro consumidor."""
+
+    code = "LICENSE_FORBIDDEN"
+
+
+class LicenseRequiredError(ForbiddenError):
+    """La compra no tiene licencia activa para el consumidor."""
+
+    code = "LICENSE_REQUIRED"
+
+
+class DownloadLimitError(ForbiddenError):
+    code = "DOWNLOAD_LIMIT_REACHED"
+
+
+class InvalidPurchaseStateError(CatalogError):
+    """Solo una orden pagada puede generar licencia."""
+
+    status_code = 409
+    code = "ORDER_NOT_PAID"
+
+
+class DuplicateLicenseError(CatalogError):
+    status_code = 409
+    code = "LICENSE_ALREADY_ACTIVE"
+
+
+class InvalidSignedUrlError(ForbiddenError):
+    code = "SIGNATURE_INVALID"
+
+
+class ExpiredSignedUrlError(ForbiddenError):
+    status_code = 410
+    code = "URL_EXPIRED"
+
+
+class InvalidPaginationError(CatalogError):
+    status_code = 400
+    code = "PAGINATION_INVALID"

@@ -23,6 +23,7 @@ from app.repository.audit import SQLiteAuditRepository
 from app.repository.auth_parameters import SQLiteAuthParameterRepository
 from app.repository.auth_repository import auth_repository
 from app.repository.categories import SQLiteCategoryRepository
+from app.repository.commerce import SQLiteCommerceRepository
 from app.repository.database import Database
 from app.repository.email_repository import EmailDelivery
 from app.repository.photo_storage import build_photo_storage
@@ -30,6 +31,7 @@ from app.repository.products import SQLiteProductRepository
 from app.services.auth_parameters import AuthParametersService
 from app.services.auth_service import AuthService
 from app.services.categories import CategoryService
+from app.services.commerce import CommerceService
 from app.services.media import MediaService
 from app.services.products import ProductService
 from app.services.profile_service import ProfileService
@@ -275,6 +277,21 @@ def media_service(
     )
 
 
+# ---------------------------------------------------------------- HU-15
+@pytest.fixture()
+def commerce_service(
+    category_settings: Settings, clock: dict[str, datetime]
+) -> CommerceService:
+    database = Database(category_settings.database_path)
+    return CommerceService(
+        repository=SQLiteCommerceRepository(database),
+        product_repository=SQLiteProductRepository(database),
+        audit_repository=SQLiteAuditRepository(database),
+        settings=category_settings,
+        clock=lambda: clock["now"],
+    )
+
+
 # ------------------------------------------------------------- compartido
 @pytest.fixture()
 def client(
@@ -283,6 +300,7 @@ def client(
     category_service: CategoryService,
     product_service: ProductService,
     media_service: MediaService,
+    commerce_service: CommerceService,
     category_settings: Settings,
 ) -> TestClient:
     auth_repository.reset()
@@ -296,6 +314,7 @@ def client(
         test_client.app.state.category_service = category_service
         test_client.app.state.product_service = product_service
         test_client.app.state.media_service = media_service
+        test_client.app.state.commerce_service = commerce_service
         test_client.app.state.profile_service = ProfileService(
             repo=auth_repository,
             settings=category_settings,
