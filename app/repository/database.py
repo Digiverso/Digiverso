@@ -73,6 +73,23 @@ CREATE TABLE IF NOT EXISTS licencias (
 
 CREATE INDEX IF NOT EXISTS idx_licencias_producto ON licencias(producto_id);
 
+-- Reseñas y calificaciones (HU-18, COMU-01 a COMU-04). ``visible`` permite
+-- retirar reseñas reportadas sin borrar el histórico ni la distribución.
+CREATE TABLE IF NOT EXISTS reviews (
+    id           TEXT PRIMARY KEY,
+    producto_id  TEXT NOT NULL REFERENCES productos(id) ON DELETE CASCADE,
+    usuario_id   TEXT NOT NULL,
+    calificacion INTEGER NOT NULL CHECK (calificacion BETWEEN 1 AND 5),
+    texto        TEXT NOT NULL,
+    fecha        TEXT NOT NULL,
+    visible      INTEGER NOT NULL DEFAULT 1 CHECK (visible IN (0, 1))
+);
+
+CREATE INDEX IF NOT EXISTS idx_reviews_producto_visible
+    ON reviews(producto_id, visible, fecha DESC);
+CREATE INDEX IF NOT EXISTS idx_reviews_usuario_producto
+    ON reviews(usuario_id, producto_id);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     entidad     TEXT NOT NULL,

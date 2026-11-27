@@ -136,3 +136,38 @@ class AuthParameterVersionNotFoundError(CatalogError):
 class InvalidCatalogQueryError(CatalogError):
     status_code = 422
     code = "CATALOG_QUERY_INVALID"
+
+
+# ------------------------------------------------------------------ HU-18
+class ReviewError(CatalogError):
+    """Base de los errores de reseñas y calificaciones."""
+
+    code = "REVIEW_ERROR"
+
+
+class PurchaseRequiredError(ReviewError):
+    """COMU-04: el actor no acredita compra o licencia del producto."""
+
+    status_code = 403
+    code = "REVIEW_PURCHASE_REQUIRED"
+
+
+class DuplicateReviewError(ReviewError):
+    """COMU-03: ya existe una reseña del usuario para el producto."""
+
+    status_code = 409
+    code = "REVIEW_DUPLICATE"
+
+
+class InvalidRatingError(ReviewError):
+    """COMU-01: calificación fuera del rango permitido."""
+
+    status_code = 400
+    code = "REVIEW_RATING_INVALID"
+
+
+class InvalidReviewTextError(ReviewError):
+    """COMU-02: texto vacío, demasiado corto o demasiado largo."""
+
+    status_code = 400
+    code = "REVIEW_TEXT_INVALID"

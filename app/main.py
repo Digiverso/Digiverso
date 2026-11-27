@@ -18,10 +18,12 @@ from app.api.v1.categories import router as categories_router
 from app.api.v1.media import router as media_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.products import router as products_router
+from app.api.v1.reviews import router as reviews_router
 from app.api.v1.showcase import router as showcase_router
 from app.api.v1.users import router as users_router
 from app.cache.auth_parameters import InMemoryAuthParametersCache
 from app.cache.category_tree import InMemoryCategoryTreeCache
+from app.cache.ratings import InMemoryRatingCache
 from app.cache.showcase import InMemoryShowcaseCache
 from app.core.config import Settings, get_settings, settings as default_settings
 from app.core.responses import ApiResponse, ok
@@ -31,12 +33,16 @@ from app.repository.auth_parameters import SQLiteAuthParameterRepository
 from app.repository.categories import SQLiteCategoryRepository
 from app.repository.auth_repository import auth_repository
 from app.repository.database import Database
+from app.repository.events import InMemoryEventBus
 from app.repository.photo_storage import build_photo_storage
 from app.repository.products import SQLiteProductRepository
+from app.repository.reviews import SQLiteReviewRepository
 from app.services.auth_parameters import AuthParametersService
 from app.services.categories import CategoryService
+from app.services.commerce import LicensePurchaseGateway
 from app.services.media import MediaService
 from app.services.products import ProductService
+from app.services.reviews import ReviewService
 from app.services.profile_service import ProfileService
 
 DESCRIPTION = """
@@ -49,6 +55,7 @@ API REST de Digiverso con arquitectura de capas.
 - **Notificaciones**: preferencias, bandeja, lectura y cola de entrega (AUT-10/AUT-11).
 - **Administración**: consulta y actualización versionada de los parámetros de autenticación.
 - **Catálogo**: árbol de categorías, ciclo de vida de productos, medios del producto y búsqueda/vitrina.
+- **Comunidad**: reseñas verificadas, consulta paginada y calificación promedio.
 - **Root**: estado del servicio.
 
 Todas las respuestas usan el sobre `message`, `data` y `success`.
@@ -110,6 +117,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             settings=settings,
             showcase_cache=application.state.product_service.showcase_cache,
         )
+        application.state.event_bus = InMemoryEventBus()
+        application.state.rating_cache = InMemoryRatingCache()
+        application.state.review_service = ReviewService(
+            repository=SQLiteReviewRepository(database),
+            product_repository=product_repository,
+            purchase_gateway=LicensePurchaseGateway(product_repository),
+            cache=application.state.rating_cache,
+            event_bus=application.state.event_bus,
+            settings=settings,
+            showcase_cache=application.state.product_service.showcase_cache,
+        )
         yield
 
     application = FastAPI(
@@ -165,6 +183,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             {
                 "name": "Catálogo · Búsqueda y vitrina",
                 "description": "Búsqueda, filtros, vitrina por categoría y detalle público.",
+            },
+            {
+                "name": "Comunidad · Reseñas y calificaciones",
+                "description": (
+                    "Publicación de reseñas verificadas, consulta paginada y "
+                    "calificación promedio con distribución (HU-18)."
+                ),
             },
             {
                 "name": "Root",
@@ -254,6 +279,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(products_router)
     application.include_router(media_router)
     application.include_router(showcase_router)
+    application.include_router(reviews_router)
 
     @application.get(
         "/",

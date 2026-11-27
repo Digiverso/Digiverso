@@ -159,6 +159,17 @@ class Settings:
     media_storage_dir: Path = Path("uploads/media")
     media_url_base: str = "https://cdn.digiverso.com/products"
 
+    # Comunidad · reseñas y calificaciones (HU-18). COMU-01 fija el rango y
+    # COMU-02 no traía longitudes explícitas: se fijan aquí y son sobreescribibles.
+    community_rating_min: int = 1  # COMU-01
+    community_rating_max: int = 5  # COMU-01
+    community_text_min_length: int = 10  # COMU-02
+    community_text_max_length: int = 1000  # COMU-02
+    community_require_purchase: bool = True  # COMU-04
+    community_unique_review: bool = True  # COMU-03
+    community_default_page_size: int = 20
+    community_max_page_size: int = 100
+
     @property
     def media_max_read_bytes(self) -> int:
         """Tope de lectura del cuerpo: basta para detectar CAT-06/CAT-08."""
@@ -273,6 +284,14 @@ def load_settings() -> Settings:
         media_url_base=value(
             "MEDIA_URL_BASE", "https://cdn.digiverso.com/products"
         ).rstrip("/"),
+        community_rating_min=int(value("COMU_01_MIN_RATING", "1")),
+        community_rating_max=int(value("COMU_01_MAX_RATING", "5")),
+        community_text_min_length=int(value("COMU_02_MIN_LENGTH", "10")),
+        community_text_max_length=int(value("COMU_02_MAX_LENGTH", "1000")),
+        community_require_purchase=_as_bool(value("COMU_04_REQUIRE_PURCHASE", "true")),
+        community_unique_review=_as_bool(value("COMU_03_UNIQUE_REVIEW", "true")),
+        community_default_page_size=int(value("COMMUNITY_DEFAULT_PAGE_SIZE", "20")),
+        community_max_page_size=int(value("COMMUNITY_MAX_PAGE_SIZE", "100")),
     )
 
 

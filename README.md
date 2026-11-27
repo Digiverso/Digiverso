@@ -117,4 +117,16 @@ Documentación funcional:
 Documentación funcional:
 [`docs/HU-10_busqueda_filtros_vitrina_y_detalle.md`](docs/HU-10_busqueda_filtros_vitrina_y_detalle.md).
 
+## Endpoints de reseñas y calificaciones
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `POST` | `/api/v1/community/products/{id}/reviews` | Publicar reseña verificada (201/400/403/404/409) |
+| `GET` | `/api/v1/community/products/{id}/reviews` | Consultar reseñas visibles paginadas (200) |
+| `GET` | `/api/v1/community/products/{id}/rating` | Consultar promedio, total y distribución (200) |
+
+La compra se valida con un adaptador local sobre licencias vigentes mientras
+Comercio no exponga su API interna. Documentación funcional:
+[`docs/HU-18_resenas_y_calificaciones.md`](docs/HU-18_resenas_y_calificaciones.md).
+
 Todas las respuestas usan el sobre `{ "message", "data", "success" }`.

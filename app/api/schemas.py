@@ -11,6 +11,7 @@ from app.domain.auth import Role
 from app.domain.auth_parameters import AUTH_MODULO, AuthParameterVersion
 from app.domain.category import Category
 from app.domain.product import MEDIO_ELIMINADO, Medio, Product
+from app.domain.reviews import Rating, Review
 
 
 class CategoryNode(BaseModel):
@@ -498,3 +499,60 @@ class NotificationListData(BaseModel):
 class NotificationReadData(BaseModel):
     id: str
     leida: bool
+
+
+# ------------------------------------------------------------ HU-18 (SUB-22/23)
+class ReviewCreateRequest(BaseModel):
+    """Cuerpo de PRC-54; ``userId`` se toma del actor autenticado."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    calificacion: int
+    texto: str
+
+
+class ReviewItem(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    product_id: str = Field(alias="productId")
+    user_id: str = Field(alias="userId")
+    calificacion: int
+    texto: str
+    fecha: datetime
+
+    @classmethod
+    def from_review(cls, review: Review) -> ReviewItem:
+        return cls(
+            id=review.id,
+            product_id=review.product_id,
+            user_id=review.user_id,
+            calificacion=review.calificacion,
+            texto=review.texto,
+            fecha=review.fecha,
+        )
+
+
+class ReviewPage(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    items: list[ReviewItem]
+    total: int
+    pagina: int
+    tamanio_pagina: int = Field(alias="tamanioPagina")
+
+
+class RatingData(BaseModel):
+    """FUN-56/FUN-57: promedio, total y distribución 1..5."""
+
+    promedio: float
+    total: int
+    distribucion: dict[str, int]
+
+    @classmethod
+    def from_rating(cls, rating: Rating) -> RatingData:
+        return cls(
+            promedio=rating.promedio,
+            total=rating.total,
+            distribucion={str(clave): valor for clave, valor in rating.distribucion.items()},
+        )
